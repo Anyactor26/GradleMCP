@@ -1,0 +1,26 @@
+[project]
+name = "gradlemcp"
+version = "0.1.0"
+description = "Self-hosted isolated asynchronous Gradle execution for AI agents"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+dependencies = ["fastapi>=0.143.3,<1", "uvicorn[standard]>=0.54.0,<1", "mcp[cli]>=2.3.0,<3", "sqlalchemy>=2.1.5,<3", "psycopg[binary]>=3.3.6,<4", "pydantic-settings>=2.16.0,<3", "typer>=0.27.3,<1", "httpx>=0.28.1,<1"]
+[project.scripts]
+gradlemcp = "gradlemcp.cli:main"
+[build-system]
+requires = ["hatchling==1.32.4"]
+build-backend = "hatchling.build"
+[dependency-groups]
+dev = ["pytest>=9.1.1", "pytest-asyncio>=1.4.0", "ruff>=0.17.1", "mypy>=2.4.0", "pip-audit>=2.10.1", "build>=1.6.1"]
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+markers = ["docker: requires a live Docker daemon and provisioned worker images"]
+[tool.ruff]
+line-length = 100
+[tool.mypy]
+ignore_missing_imports = true
+check_untyped_defs = true
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

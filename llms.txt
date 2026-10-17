@@ -1,0 +1,7 @@
+# GradleMCP
+> Self-hosted asynchronous Docker-isolated Gradle builds for AI agents.
+- Agent workflow: docs/AI_GUIDE.md
+- Machine API: docs/openapi.json
+- MCP integration: docs/MCP.md
+- Security and limitations: docs/SECURITY_MODEL.md
+Capabilities: authenticated GET /api/v1/capabilities. MCP: /mcp/ or stdio.

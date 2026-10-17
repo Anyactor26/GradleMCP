@@ -1,0 +1,10 @@
+# Copy to ngrok.local.yml (gitignored), insert token locally, chmod 600.
+version: "3"
+agent:
+  authtoken: REPLACE_LOCALLY
+  web_addr: 0.0.0.0:4040
+endpoints:
+  - name: gradlemcp
+    url: https://YOUR-ASSIGNED-DOMAIN.ngrok-free.app
+    upstream:
+      url: http://gradlemcp:8000

@@ -1,0 +1,324 @@
+import asyncio
+import collections
+import time
+from contextlib import asynccontextmanager
+from urllib.parse import urlparse
+
+from fastapi import Depends, FastAPI, Query, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from mcp.server.transport_security import TransportSecuritySettings
+from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
+
+from .config import load_settings
+from .db import Database, require
+from .endpoint import endpoint_status
+from .errors import ErrorResponse, ServiceError
+from .mcp_adapter import create_mcp, request_token
+from .scheduler import Scheduler
+from .service import BuildRequest, Service
+from .worker import DockerWorker
+
+
+class InspectRequest(BaseModel):
+    project_id: str
+    subdirectory: str = "."
+
+
+class PublishRequest(BaseModel):
+    tasks: list[str] = Field(min_length=1, max_length=32)
+    idempotency_key: str = Field(min_length=1, max_length=128)
+
+
+class SecurityMiddleware:
+    def __init__(self, app, service):
+        self.app, self.service = app, service
+        self.windows = collections.defaultdict(collections.deque)
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        headers = dict(scope["headers"])
+        if scope["path"] in ("/health", "/ready"):
+            return await self.app(scope, receive, send)
+        try:
+            auth = headers.get(b"authorization", b"").decode(errors="replace")
+            if not auth.startswith("Bearer "):
+                raise ServiceError("unauthorized", "Bearer credential required", 401)
+            token = auth[7:]
+            client = await run_in_threadpool(self.service.db.authenticate, token)
+            origin = headers.get(b"origin")
+            if origin and origin.decode() != self.service.config.public_url:
+                raise ServiceError(
+                    "origin_rejected", "Origin is not the configured public URL", 403
+                )
+            now = time.monotonic()
+            window = self.windows[client.id]
+            while window and window[0] < now - 60:
+                window.popleft()
+            if len(window) >= self.service.config.requests_per_minute:
+                raise ServiceError("rate_limit", "Client rate limit reached", 429, retryable=True)
+            window.append(now)
+            maximum = self.service.config.upload_mb * 1024**2 * 4 // 3 + 65536
+            body = bytearray()
+            while True:
+                message = await receive()
+                if message["type"] == "http.disconnect":
+                    return
+                body.extend(message.get("body", b""))
+                if len(body) > maximum:
+                    raise ServiceError(
+                        "request_limit", "Request body exceeds configured limit", 413
+                    )
+                if not message.get("more_body", False):
+                    break
+            sent = False
+
+            async def replay():
+                nonlocal sent
+                if not sent:
+                    sent = True
+                    return {"type": "http.request", "body": bytes(body), "more_body": False}
+                return await receive()
+
+            scope.setdefault("state", {})["client"] = client
+            context_token = request_token.set(token)
+            try:
+                await self.app(scope, replay, send)
+            finally:
+                request_token.reset(context_token)
+        except ServiceError as exc:
+            response = JSONResponse(
+                {"error": exc.body},
+                status_code=exc.status,
+                headers={"WWW-Authenticate": "Bearer"} if exc.status == 401 else None,
+            )
+            await response(scope, receive, send)
+
+
+def create_app(config=None, *, start_scheduler=True, worker=None):
+    config = config or load_settings()
+    db = Database(config)
+    service = Service(config, db)
+    worker = worker or DockerWorker(config)
+    scheduler = Scheduler(service, worker)
+    mcp, publish = create_mcp(service)
+    allowed_hosts = [f"{config.host}:*", "localhost:*", "127.0.0.1:*"]
+    if config.public_url:
+        allowed_hosts.append(urlparse(config.public_url).netloc)
+    remote = mcp.streamable_http_app(
+        streamable_http_path="/",
+        stateless_http=True,
+        json_response=True,
+        max_request_body_size=config.upload_mb * 1024**2 * 4 // 3 + 65536,
+        transport_security=TransportSecuritySettings(
+            allowed_hosts=allowed_hosts,
+            allowed_origins=[config.public_url] if config.public_url else [],
+        ),
+    )
+
+    @asynccontextmanager
+    async def lifespan(app):
+        started = False
+        try:
+            if start_scheduler:
+                await asyncio.to_thread(scheduler.start)
+                started = True
+            async with remote.router.lifespan_context(remote):
+                yield
+        finally:
+            if started:
+                await asyncio.to_thread(scheduler.stop)
+            db.engine.dispose()
+
+    app = FastAPI(
+        title="GradleMCP",
+        version="0.1.0",
+        lifespan=lifespan,
+        description="Bearer-authenticated asynchronous isolated Gradle execution. ZIP upload uses application/zip. All /api/v1 routes require a credential.",
+    )
+    app.state.service, app.state.scheduler = service, scheduler
+    app.add_middleware(SecurityMiddleware, service=service)
+
+    @app.exception_handler(ServiceError)
+    async def error(request, exc):
+        return JSONResponse({"error": exc.body}, status_code=exc.status)
+
+    @app.exception_handler(Exception)
+    async def internal_error(request, exc):
+        return JSONResponse(
+            {
+                "error": {
+                    "code": "internal_error",
+                    "message": "Internal service error; contact the operator",
+                    "retryable": False,
+                    "permanent": False,
+                    "details": {},
+                }
+            },
+            status_code=500,
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid(request, exc):
+        # Pydantic input values can contain secrets; never serialize them back.
+        return JSONResponse(
+            {
+                "error": {
+                    "code": "invalid_request",
+                    "message": "Request does not match the documented schema",
+                    "retryable": False,
+                    "permanent": True,
+                    "details": {"fields": [list(e["loc"]) for e in exc.errors()]},
+                }
+            },
+            status_code=422,
+        )
+
+    def client(request: Request):
+        return request.state.client
+
+    @app.get("/health", tags=["Health"])
+    def health():
+        return {"status": "ok"}
+
+    @app.get("/ready", tags=["Health"])
+    def ready():
+        ok = worker.available()
+        try:
+            service.check_disk()
+        except ServiceError:
+            ok = False
+        return JSONResponse({"ready": ok}, status_code=200 if ok else 503)
+
+    @app.get("/api/v1/capabilities")
+    def capabilities(c=Depends(client)):
+        return service.capabilities(c)
+
+    @app.get("/api/v1/system/endpoint")
+    def endpoint(c=Depends(client)):
+        require(c, "read")
+        return endpoint_status(config)
+
+    @app.get("/api/v1/system/toolchains")
+    @app.get("/api/v1/toolchains")
+    def toolchains(c=Depends(client)):
+        return service.capabilities(c)["toolchains"]
+
+    @app.post(
+        "/api/v1/projects",
+        status_code=201,
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {"application/zip": {"schema": {"type": "string", "format": "binary"}}},
+            }
+        },
+    )
+    async def upload(request: Request, c=Depends(client)):
+        data = await request.body()
+        return await run_in_threadpool(service.upload, c, data)
+
+    @app.post("/api/v1/projects/inspect")
+    def inspect(request: InspectRequest, c=Depends(client)):
+        return service.project(c, request.project_id, request.subdirectory)[1]
+
+    @app.post("/api/v1/projects/compatibility")
+    def compatibility(request: BuildRequest, c=Depends(client)):
+        return service.compatibility(c, request)
+
+    @app.delete("/api/v1/projects/{project_id}")
+    def delete_project(project_id: str, c=Depends(client)):
+        return service.delete_project(c, project_id)
+
+    @app.post("/api/v1/builds", status_code=202)
+    def submit(request: BuildRequest, c=Depends(client)):
+        return service.submit(c, request)
+
+    @app.get("/api/v1/builds")
+    def builds(
+        offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100), c=Depends(client)
+    ):
+        return service.list_jobs(c, offset, limit)
+
+    @app.get("/api/v1/builds/{build_id}")
+    def status(build_id: str, c=Depends(client)):
+        return service.status(c, build_id)
+
+    @app.post("/api/v1/builds/{build_id}/cancel")
+    def cancel(build_id: str, c=Depends(client)):
+        return service.cancel(c, build_id)
+
+    @app.get("/api/v1/builds/{build_id}/logs")
+    def logs(
+        build_id: str,
+        offset: int = Query(0, ge=0),
+        limit: int = Query(65536, ge=1, le=65536),
+        c=Depends(client),
+    ):
+        return service.logs(c, build_id, offset, limit)
+
+    @app.get("/api/v1/builds/{build_id}/artifacts")
+    def artifacts(build_id: str, c=Depends(client)):
+        return service.artifacts(c, build_id)
+
+    @app.get("/api/v1/builds/{build_id}/artifacts/{artifact_id}")
+    def artifact(build_id: str, artifact_id: str, c=Depends(client)):
+        path, item = service.artifact(c, build_id, artifact_id)
+        return FileResponse(
+            path, filename=item["path"].split("/")[-1], media_type="application/octet-stream"
+        )
+
+    @app.post("/api/v1/builds/{build_id}/publish", status_code=202)
+    def publication(build_id: str, request: PublishRequest, c=Depends(client)):
+        return publish(c, build_id, request.tasks, request.idempotency_key)
+
+    @app.get("/api/v1/queue")
+    def queue(c=Depends(client)):
+        return service.queue(c)
+
+    @app.get("/api/v1/metrics", response_class=PlainTextResponse)
+    def metrics(c=Depends(client)):
+        require(c, "admin")
+        q = service.queue(c)
+        return (
+            "\n".join(
+                f"gradlemcp_{key} {q[key]}"
+                for key in ("queued", "active", "available_workers", "disk_free_bytes")
+            )
+            + "\n"
+        )
+
+    # Actual routes supply schemas; declare shared bearer security for clients/code generators.
+    original_openapi = app.openapi
+
+    def openapi():
+        schema = original_openapi()
+        schema.setdefault("components", {}).setdefault("securitySchemes", {})["BearerAuth"] = {
+            "type": "http",
+            "scheme": "bearer",
+        }
+        errors = ErrorResponse.model_json_schema(ref_template="#/components/schemas/{model}")
+        definitions = errors.pop("$defs", {})
+        schemas = schema["components"].setdefault("schemas", {})
+        schemas.update(definitions)
+        schemas["ErrorResponse"] = errors
+        for path, operations in schema["paths"].items():
+            if path.startswith("/api/"):
+                for operation in operations.values():
+                    operation["security"] = [{"BearerAuth": []}]
+                    for status_code in (400, 401, 403, 404, 409, 413, 422, 429, 500, 503):
+                        operation.setdefault("responses", {})[str(status_code)] = {
+                            "description": "Structured service or validation error",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+                                }
+                            },
+                        }
+        return schema
+
+    app.openapi = openapi  # type: ignore[method-assign]
+    app.mount("/mcp", remote)
+    return app

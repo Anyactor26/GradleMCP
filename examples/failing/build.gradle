@@ -1,0 +1,3 @@
+tasks.register('build') {
+    doLast { throw new GradleException('Intentional demonstration failure: inspect logs before retrying') }
+}

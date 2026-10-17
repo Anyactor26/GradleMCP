@@ -1,0 +1,46 @@
+{
+  "data_dir": "data",
+  "database_url": "sqlite:///./data/gradlemcp.db",
+  "host": "127.0.0.1",
+  "port": 8000,
+  "max_workers": 1,
+  "max_queue": 32,
+  "per_client_active": 1,
+  "per_client_queued": 8,
+  "memory_mb": 2048,
+  "total_memory_mb": 2048,
+  "cpus": 1.0,
+  "pids": 256,
+  "timeout_seconds": 1800,
+  "upload_mb": 16,
+  "workspace_mb": 512,
+  "artifact_mb": 64,
+  "log_mb": 8,
+  "max_files": 10000,
+  "retention_hours": 168,
+  "storage_reserve_mb": 1024,
+  "requests_per_minute": 120,
+  "network": "none",
+  "wrapper_enabled": false,
+  "wrapper_hosts": [
+    "services.gradle.org",
+    "downloads.gradle.org"
+  ],
+  "auto_pull": false,
+  "toolchains": {
+    "java17": {
+      "image": "gradlemcp-worker:17",
+      "java": 17,
+      "gradle": "8.14.3",
+      "android": false,
+      "native": false
+    }
+  },
+  "public_url": null,
+  "exposure": "private",
+  "tunnel_status_url": null,
+  "publish_tasks": [],
+  "publish_toolchain": null,
+  "publish_secrets_file": null,
+  "log_level": "INFO"
+}

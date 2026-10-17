@@ -1,0 +1,7 @@
+# Replace with your DNS name; Caddy provisions and renews TLS certificates.
+builds.example.org {
+    request_body {
+        max_size 24MB
+    }
+    reverse_proxy 127.0.0.1:8000
+}

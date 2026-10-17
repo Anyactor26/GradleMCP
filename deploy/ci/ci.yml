@@ -1,0 +1,62 @@
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: {version: "0.13.1", python-version: "3.11"}
+      - uses: actions/setup-node@v4
+        with: {node-version: "22"}
+      - run: uv sync --locked
+      - run: make lint typecheck test
+      - run: uv build
+      - run: uv run gradlemcp export-openapi && git diff --exit-code docs/openapi.json
+      - run: make audit
+  docker-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: {version: "0.13.1", python-version: "3.11"}
+      - run: uv sync --locked
+      - run: docker build -f deploy/worker.Dockerfile -t gradlemcp-worker:17 .
+      - run: docker build -f deploy/worker.Dockerfile --build-arg BASE_IMAGE=gradle:8.14.3-jdk21 --build-arg RUNTIME_IMAGE=eclipse-temurin:21-jdk-jammy -t gradlemcp-worker:21 .
+      - run: make integration
+        env: {GRADLEMCP_JAVA21_IMAGE: "gradlemcp-worker:21"}
+      - run: docker build -t gradlemcp-controller:ci .
+      - name: One-command installation and idempotent rerun
+        run: |
+          ./install.sh
+          before=$(sha256sum data/bootstrap-token.local)
+          ./install.sh
+          test "$before" = "$(sha256sum data/bootstrap-token.local)"
+      - name: Stop installer deployment
+        if: always()
+        run: docker compose down
+
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: gradlemcp_test
+          POSTGRES_USER: gradlemcp_test
+          POSTGRES_PASSWORD: ephemeral-ci-only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U gradlemcp_test -d gradlemcp_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: {version: "0.13.1", python-version: "3.11"}
+      - run: uv sync --locked
+      - run: uv run pytest tests/test_postgres.py -v
+        env:
+          GRADLEMCP_TEST_POSTGRES: postgresql+psycopg://gradlemcp_test:ephemeral-ci-only@localhost:5432/gradlemcp_test
