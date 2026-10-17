@@ -20,8 +20,8 @@
 8. Optional PyPI/container registry publishing needs external registry credentials
    or configured trusted publishing. Do not expose those credentials to PR workflows.
 
-After activation (see deploy/ci/README.md), CI builds distributions on pushes/PRs;
-`deploy/ci/release.yml` is the template for building release
+After activation (see .test/README.md), CI builds distributions on pushes/PRs;
+`.test/workflows/release.yml` is the template for building release
 assets on explicit workflow dispatch with read-only permissions. Download artifacts,
 verify checksums, then publish manually. No production publication secrets are
 required in standard CI. Report actual CI results, not merely the existence of YAML.

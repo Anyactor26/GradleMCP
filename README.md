@@ -1,7 +1,8 @@
 # GradleMCP
 
-**An open-source remote Gradle build engine for AI agents.** Apache-2.0, self-hosted,
-provider-independent. Submit immutable ZIP projects through REST or MCP; builds wait
+**A self-hosted remote Gradle build engine for AI agents.**
+Developed by **Anyactor**. **All Rights Reserved (ARR)**; see [LICENSE](LICENSE).
+This is not open-source software under the current license. Provider-independent. Submit immutable ZIP projects through REST or MCP; builds wait
 in a persistent queue and run in disposable, resource-limited Docker containers.
 
 ## What is implemented
@@ -105,9 +106,9 @@ public use. [Deployment and tunnel instructions](docs/DEPLOYMENT.md).
 ## CI activation
 
 The connected GitHub App cannot write `.github/workflows/` without additional
-permission. Complete workflows are preserved in **[deploy/ci](deploy/ci/README.md)**,
-but are **not active**. Reconnect GitHub with workflow-write permission or activate
-them using an authorized maintainer account. No GitHub CI success is claimed.
+permission. Complete workflows are preserved in **[.test](.test/README.md)**,
+but are **not active**. Rename `.test` to `.github` using your authorized maintainer
+account to activate them (workflow-write permission is still required). No GitHub CI success is claimed.
 
 ## Documentation
 

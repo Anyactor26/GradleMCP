@@ -4,7 +4,7 @@ This is a source implementation/release candidate, **not a declaration that all
 production deployment requirements have been verified**. The implementation is delivered on the `arena/6626d3dc-gradlemcp` GitHub branch.
 No public release, registry publication, live tunnel or production publication is
 claimed. The GitHub App lacks workflow-write permission, so workflows are preserved as
-inactive templates in deploy/ci. No remote CI run is claimed; local results follow.
+inactive templates in .test. No remote CI run is claimed; local results follow.
 
 ## Executed in the authoring environment
 
@@ -17,8 +17,8 @@ PostgreSQL service, external tunnel account or publication credentials were avai
 | `ruff check src tests examples/client.py` | Passed |
 | `ruff format --check src tests examples/client.py` | Passed |
 | `mypy src/gradlemcp` | Passed, 14 source files; non-strict check_untyped_defs mode |
-| `pytest -q` | **84 passed, 8 skipped** |
-| Non-Docker suite (`make test`) | Same 84 passing tests; PostgreSQL skipped, 7 Docker tests deselected |
+| `pytest -q` | **86 passed, 8 skipped** |
+| Non-Docker suite (`make test`) | Same 86 passing tests; PostgreSQL skipped, 7 Docker tests deselected |
 | Dependency audit (`pip-audit --skip-editable`) | No known vulnerabilities reported for installed audited dependencies; project itself skipped as editable |
 | `uv build` | Wheel and sdist produced |
 | Fresh wheel install | Installed into separate environment with locked runtime dependencies; `gradlemcp --help` succeeded |
@@ -36,6 +36,11 @@ output, safe reruns, read-only prerequisite checks, failed prerequisite/build/st
 readiness handling, credential failure cleanup, symlink refusal and concurrent-install
 locking. These tests do not pretend Docker actually ran locally. Real installer
 setup and idempotent rerun are included in the inactive Docker CI template.
+
+License/identity metadata and workflow-folder layout are also checked. The current
+license is ARR (LicenseRef-ARR), developer Anyactor; prior-copy grants and third-party
+licenses are not revoked. Both inactive `.test` and activated `.github` layouts are
+supported by the repository metadata test.
 
 ### What the passing tests establish
 
@@ -67,12 +72,12 @@ The eight skipped tests are seven real Docker tests (Groovy/Kotlin-DSL/multi-pro
 builds, intentional failure, queue/cancellation/timeout, concurrency, alternative JDK)
 and one real PostgreSQL transaction test. Templates configure Docker, the real installer and a PostgreSQL service, but are
 not active: GitHub rejected workflow writes by the connected app. An authorized
-maintainer must activate deploy/ci/*.yml before remote CI results can be obtained.
+maintainer must activate .test/workflows/*.yml before remote CI results can be obtained.
 
 Before claiming a production-ready release:
 
 - [ ] Grant workflow-write permission or use an authorized maintainer to activate
-      the preserved deploy/ci templates as .github/workflows/*.yml.
+      the preserved .test templates as .github/workflows/*.yml.
 
 - [ ] Build controller/worker images and run the Docker integration suite on a real
       Linux Docker host. Confirm a real Gradle build, smoke test, intentional failure,

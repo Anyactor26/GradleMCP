@@ -4,7 +4,8 @@ version = "0.1.0"
 description = "Self-hosted isolated asynchronous Gradle execution for AI agents"
 readme = "README.md"
 requires-python = ">=3.11"
-license = "Apache-2.0"
+license = "LicenseRef-ARR"
+authors = [{name = "Anyactor"}]
 license-files = ["LICENSE", "NOTICE"]
 dependencies = ["fastapi>=0.143.3,<1", "uvicorn[standard]>=0.54.0,<1", "mcp[cli]>=2.3.0,<3", "sqlalchemy>=2.1.5,<3", "psycopg[binary]>=3.3.6,<4", "pydantic-settings>=2.16.0,<3", "typer>=0.27.3,<1", "httpx>=0.28.1,<1"]
 [project.scripts]
