@@ -1,0 +1,21 @@
+[Unit]
+Description=GradleMCP remote build controller
+After=network-online.target docker.service
+Requires=docker.service
+[Service]
+Type=simple
+User=gradlemcp
+Group=gradlemcp
+SupplementaryGroups=docker
+WorkingDirectory=/var/lib/gradlemcp
+Environment=GRADLEMCP_CONFIG=/etc/gradlemcp/config.json
+ExecStart=/opt/gradlemcp/.venv/bin/gradlemcp serve
+Restart=on-failure
+TimeoutStopSec=180
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/gradlemcp
+ProtectHome=true
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+plugins { id 'java' }
+java { toolchain { languageVersion = JavaLanguageVersion.of(17) } }
+// Offline, dependency-free test harness: no Maven access required.
+tasks.register('smokeTest', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'demo.SmokeTest'
+}
+check.dependsOn smokeTest
+tasks.register('slow') { doLast { Thread.sleep(20000) } }
+tasks.register('intentionalFailure') { doLast { throw new GradleException('intentional failure for diagnostics') } }

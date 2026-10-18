@@ -1,0 +1,32 @@
+services:
+  gradlemcp:
+    build: .
+    restart: unless-stopped
+    ports: ["127.0.0.1:8000:8000"]
+    volumes:
+      - ./data:/var/lib/gradlemcp/data
+      - ./gradlemcp.json:/var/lib/gradlemcp/gradlemcp.json:ro
+      # Trusted controller only. Root-equivalent; never pass this to build containers.
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      options: {max-size: "10m", max-file: "3"}
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.1
+    profiles: [cloudflare]
+    command: tunnel --no-autoupdate run --token-file /run/secrets/tunnel_token
+    secrets: [tunnel_token]
+    restart: unless-stopped
+  ngrok:
+    image: ngrok/ngrok:3
+    profiles: [ngrok]
+    command: start --all --config /etc/ngrok.yml
+    volumes: ["./deploy/ngrok.local.yml:/etc/ngrok.yml:ro"]
+    restart: unless-stopped
+secrets:
+  tunnel_token:
+    file: ./deploy/cloudflare-token.local
