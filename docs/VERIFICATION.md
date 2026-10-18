@@ -1,10 +1,13 @@
-# Delivery verification — 2026-10-17
+# Delivery verification — 2026-10-18
 
 This is a source implementation/release candidate, **not a declaration that all
-production deployment requirements have been verified**. The implementation is delivered on the `arena/6626d3dc-gradlemcp` GitHub branch.
-No public release, registry publication, live tunnel or production publication is
-claimed. The GitHub App lacks workflow-write permission, so workflows are preserved as
-inactive templates in .test. No remote CI run is claimed; local results follow.
+production deployment requirements have been verified**. The implementation is delivered on `arena/6626d3dc-gradlemcp`. The owner activated
+`.github/workflows/ci.yml` and `release.yml`; this update preserves those files
+unchanged and does not restore `.test`. The owner's CI log showed a missing
+`.github/README.md` assertion (85 passed, 1 failed, 1 skipped, 7 deselected); that
+unnecessary assertion is removed and covered by regression tests. The current app
+cannot query Actions runs (403: Actions-read permission), so no new remote green
+result is claimed. Local results follow. No registry/publication/tunnel claim is made.
 
 ## Executed in the authoring environment
 
@@ -17,8 +20,8 @@ PostgreSQL service, external tunnel account or publication credentials were avai
 | `ruff check src tests examples/client.py` | Passed |
 | `ruff format --check src tests examples/client.py` | Passed |
 | `mypy src/gradlemcp` | Passed, 14 source files; non-strict check_untyped_defs mode |
-| `pytest -q` | **86 passed, 8 skipped** |
-| Non-Docker suite (`make test`) | Same 86 passing tests; PostgreSQL skipped, 7 Docker tests deselected |
+| `pytest -q` | **112 passed, 8 skipped** |
+| Non-Docker suite (`make test`) | Same 112 passing tests; PostgreSQL skipped, 7 Docker tests deselected |
 | Dependency audit (`pip-audit --skip-editable`) | No known vulnerabilities reported for installed audited dependencies; project itself skipped as editable |
 | `uv build` | Wheel and sdist produced |
 | Fresh wheel install | Installed into separate environment with locked runtime dependencies; `gradlemcp --help` succeeded |
@@ -30,17 +33,18 @@ PostgreSQL service, external tunnel account or publication credentials were avai
 | `doctor` | Correctly returned exit 1 with docker_cli=false and docker_daemon=false; not represented as a successful worker check |
 | Local documentation links | Checked; all referenced repository documentation exists |
 
-The one-command installer also passed `sh -n install.sh` and 12 controlled-Docker
-orchestration tests: full setup sequencing, private token/config modes, no token
-output, safe reruns, read-only prerequisite checks, failed prerequisite/build/start/
-readiness handling, credential failure cleanup, symlink refusal and concurrent-install
-locking. These tests do not pretend Docker actually ran locally. Real installer
-setup and idempotent rerun are included in the inactive Docker CI template.
+Shell syntax checks pass for both `install.sh` and `scripts/install-docker.sh`.
+Controlled tests cover automatic prerequisite setup, sudo/no-relogin operation,
+read-only and no-system-changes modes, daemon-only startup, refused sudo, supported
+Debian/Ubuntu variants, rejected signing keys, failed downloads, runtime conflicts,
+unsupported/non-systemd hosts, source-file preservation and private app credentials.
+The bootstrap tests use a staged filesystem and fake OS/package/network tools:
+**they do not execute real APT, sudo, Docker installation or a fresh VM**.
 
-License/identity metadata and workflow-folder layout are also checked. The current
-license is ARR (LicenseRef-ARR), developer Anyactor; prior-copy grants and third-party
-licenses are not revoked. Both inactive `.test` and activated `.github` layouts are
-supported by the repository metadata test.
+ARR (LicenseRef-ARR) and Anyactor identity metadata are checked. Workflow validation
+checks YAML/jobs/permissions, not a README. Regression fixtures verify both historical
+inactive and current active layouts without documentation files, preferring active
+workflows even if an empty old directory exists. No old folder is recreated in the repo.
 
 ### What the passing tests establish
 
@@ -70,15 +74,15 @@ supported by the repository metadata test.
 
 The eight skipped tests are seven real Docker tests (Groovy/Kotlin-DSL/multi-project
 builds, intentional failure, queue/cancellation/timeout, concurrency, alternative JDK)
-and one real PostgreSQL transaction test. Templates configure Docker, the real installer and a PostgreSQL service, but are
-not active: GitHub rejected workflow writes by the connected app. An authorized
-maintainer must activate .test/workflows/*.yml before remote CI results can be obtained.
+and one real PostgreSQL transaction test. Active `.github/workflows` jobs include
+Docker, the real installer with already-present Docker, and PostgreSQL. Status of
+those remote jobs is not accessible through the connected app. Fresh-OS package
+bootstrap still requires independent VM verification, not just mocked tests.
 
 Before claiming a production-ready release:
 
-- [ ] Grant workflow-write permission or use an authorized maintainer to activate
-      the preserved .test templates as .github/workflows/*.yml.
-
+- [ ] Verify Docker prerequisite installation on clean supported Debian/Ubuntu VMs,
+      including root/sudo paths, reboot persistence and least-privilege operator access.
 - [ ] Build controller/worker images and run the Docker integration suite on a real
       Linux Docker host. Confirm a real Gradle build, smoke test, intentional failure,
       queue wait, cancellation, timeout, concurrent jobs and authorized JAR download.

@@ -18,3 +18,5 @@ gradlemcp.json
 downloaded-artifacts/
 .gradlemcp-install.lock/
 .gradlemcp-config.*
+
+.cache/

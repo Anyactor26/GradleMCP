@@ -5,6 +5,8 @@ format:
 	uv run ruff format src tests examples/client.py
 	uv run ruff check src tests examples/client.py --fix
 lint:
+	sh -n install.sh
+	sh -n scripts/install-docker.sh
 	uv run ruff check src tests examples/client.py
 	uv run ruff format --check src tests examples/client.py
 typecheck:

@@ -99,3 +99,15 @@ Security tests cover API ownership/scopes/revocation, ZIP attacks, task input in
 limits, wrapper policy and output safety. Docker integration tests are opt-in and were
 not executable in the authoring sandbox. There has been no third-party penetration
 test, container escape audit, egress firewall verification, or production load test.
+
+
+## Installer privileges
+
+On supported Debian/Ubuntu systemd hosts, install.sh can install Docker automatically.
+It requests root/sudo, uses signed OS/APT packages, verifies the Docker public-key
+fingerprint, and keeps repository trust scoped via Signed-By. No downloaded shell
+installer, socket chmod or automatic Docker-group grant is used. Existing runtimes
+are not removed silently. Docker administration remains root-equivalent even without
+group changes: review local scripts/Dockerfiles before authorizing. --check is read-only;
+--no-system-changes disables package/repository/service changes. OS bootstrap is tested
+with controlled tools, not claimed verified on a fresh VM in this authoring environment.

@@ -3,6 +3,7 @@
 import tomllib
 from pathlib import Path
 
+import pytest
 import yaml
 
 
@@ -15,11 +16,43 @@ def test_arr_license_and_developer_metadata():
     assert "Apache-2.0" not in Path("README.md").read_text()
 
 
-def test_ci_templates_survive_owner_folder_rename():
-    root = Path(".test") if Path(".test").is_dir() else Path(".github")
+def workflow_directory(base):
+    # Prefer actual active workflows. A documentation README is not an Actions input.
+    for candidate in (base / ".github/workflows", base / ".test/workflows"):
+        if all((candidate / name).is_file() for name in ("ci.yml", "release.yml")):
+            return candidate
+    raise AssertionError("Expected CI and release workflows in .github/workflows")
+
+
+def test_ci_workflows_validate_without_requiring_a_readme():
+    root = workflow_directory(Path("."))
     for name in ("ci.yml", "release.yml"):
-        path = root / "workflows" / name
-        workflow = yaml.safe_load(path.read_text())
+        workflow = yaml.safe_load((root / name).read_text())
         assert workflow["jobs"]
         assert workflow["permissions"] == {"contents": "read"}
-    assert "mv .test .github" in (root / "README.md").read_text()
+
+
+@pytest.mark.parametrize("folder", [".github", ".test"])
+def test_workflow_layout_does_not_need_documentation(tmp_path, folder):
+    root = tmp_path / folder / "workflows"
+    root.mkdir(parents=True)
+    for name in ("ci.yml", "release.yml"):
+        (root / name).write_text("name: fixture\n")
+    assert not (root.parent / "README.md").exists()
+    assert workflow_directory(tmp_path) == root
+
+
+def test_active_workflows_take_precedence_over_leftover_test_directory(tmp_path):
+    (tmp_path / ".test").mkdir()
+    active = tmp_path / ".github/workflows"
+    active.mkdir(parents=True)
+    for name in ("ci.yml", "release.yml"):
+        (active / name).write_text("name: active\n")
+    assert workflow_directory(tmp_path) == active
+
+
+def test_controller_uses_modern_standalone_docker_client():
+    dockerfile = Path("Dockerfile").read_text()
+    assert "DOCKER_CLI_IMAGE=docker:28-cli" in dockerfile
+    assert "COPY --from=docker_cli /usr/local/bin/docker /usr/local/bin/docker" in dockerfile
+    assert "apt-get install -y --no-install-recommends docker.io" not in dockerfile

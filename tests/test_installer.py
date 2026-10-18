@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -23,16 +24,48 @@ def installer(tmp_path):
         f"#!{sys.executable}\n"
         "import json,os,sys\n"
         "args=sys.argv[1:]\n"
+        "from pathlib import Path\n"
+        "if os.environ.get('DOCKER_NEEDS_INSTALL') and not Path(os.environ['DOCKER_SETUP_MARKER']).exists(): sys.exit(1)\n"
+        "if args==['info'] and os.environ.get('DOCKER_DAEMON_STOPPED') and not Path(os.environ['DOCKER_SETUP_MARKER']).exists(): sys.exit(1)\n"
+        "if args==['info'] and os.environ.get('DOCKER_NEEDS_SUDO') and not os.environ.get('UNDER_SUDO'): sys.exit(1)\n"
         "with open(os.environ['DOCKER_COMMAND_LOG'],'a') as log: log.write(json.dumps(args)+'\\n')\n"
         "if args[:2]==['compose','up'] and '--help' in args: print('--wait-timeout');sys.exit(0)\n"
         "if os.environ.get('DOCKER_FAIL') and ' '.join(args).startswith(os.environ['DOCKER_FAIL']): sys.exit(1)\n"
         "if 'credentials' in args: print('installer-agent.controlled-fixture-token')\n"
     )
     docker.chmod(0o755)
+    # All privilege/bootstrap paths are controlled fixtures; never run host sudo/APT.
+    sudo = bin_dir / "sudo"
+    sudo.write_text(
+        f"#!{sys.executable}\n"
+        "import os,sys\n"
+        "if os.environ.get('SUDO_FAIL'): sys.exit(1)\n"
+        "args=sys.argv[1:]; args=args[1:] if args[0]=='--' else args\n"
+        "os.execvpe(args[0],args,os.environ | {'UNDER_SUDO':'1'})\n"
+    )
+    sudo.chmod(0o755)
+    identity = bin_dir / "id"
+    identity.write_text("#!/bin/sh\nprintf '1000\\n'\n")
+    identity.chmod(0o755)
+    (root / "scripts").mkdir()
+    helper = root / "scripts/install-docker.sh"
+    helper.write_text(
+        f"#!{sys.executable}\n"
+        "import json,os,sys\nfrom pathlib import Path\n"
+        "with open(os.environ['SYSTEM_SETUP_LOG'],'a') as out: out.write(json.dumps(sys.argv[1:])+'\\n')\n"
+        "if os.environ.get('BOOTSTRAP_FAIL'):sys.exit(1)\n"
+        "Path(os.environ['DOCKER_SETUP_MARKER']).touch()\n"
+    )
+    # Parent invokes helper using sh, so use a shell trampoline to the test Python.
+    python_helper = root / "scripts/helper.py"
+    helper.rename(python_helper)
+    helper.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{python_helper}" "$@"\n')
     log = tmp_path / "docker.jsonl"
     env = os.environ | {
         "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"],
         "DOCKER_COMMAND_LOG": str(log),
+        "SYSTEM_SETUP_LOG": str(tmp_path / "setup.jsonl"),
+        "DOCKER_SETUP_MARKER": str(tmp_path / "docker-installed"),
     }
     return root, env, log
 
@@ -122,3 +155,54 @@ def test_installer_lock(installer):
     result = run(installer)
     assert result.returncode != 0
     assert "Another installer" in result.stderr
+
+
+def test_automatically_bootstraps_missing_docker(installer):
+    _, env, _ = installer
+    result = run(installer, extra_env={"DOCKER_NEEDS_INSTALL": "1"})
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert Path(env["DOCKER_SETUP_MARKER"]).exists()
+    assert Path(env["SYSTEM_SETUP_LOG"]).read_text().splitlines() == ["[]"]
+
+
+def test_uses_sudo_without_relogin_or_group_changes(installer):
+    _, env, log = installer
+    result = run(installer, extra_env={"DOCKER_NEEDS_SUDO": "1"})
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "sudo docker compose" in result.stdout
+    assert not Path(env["SYSTEM_SETUP_LOG"]).exists()
+    assert "credentials" in log.read_text()
+
+
+def test_no_system_changes_and_readonly_check_never_bootstrap(installer):
+    root, env, _ = installer
+    for option in ("--check", "--no-system-changes"):
+        result = run(installer, option, extra_env={"DOCKER_NEEDS_INSTALL": "1"})
+        assert result.returncode != 0
+        assert not Path(env["SYSTEM_SETUP_LOG"]).exists()
+        assert not (root / "data").exists()
+        assert not (root / ".gradlemcp-install.lock").exists()
+
+
+def test_bootstrap_failure_does_not_create_config_or_token(installer):
+    root, _, _ = installer
+    result = run(installer, extra_env={"DOCKER_NEEDS_INSTALL": "1", "BOOTSTRAP_FAIL": "1"})
+    assert result.returncode != 0
+    assert not (root / "gradlemcp.json").exists()
+    assert not (root / "data").exists()
+    assert not (root / ".gradlemcp-install.lock").exists()
+
+
+def test_stopped_daemon_is_started_without_reinstalling_packages(installer):
+    _, env, _ = installer
+    result = run(installer, extra_env={"DOCKER_DAEMON_STOPPED": "1"})
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert Path(env["SYSTEM_SETUP_LOG"]).read_text().splitlines() == ['["--start-only"]']
+
+
+def test_sudo_denied_prevents_installation(installer):
+    root, env, _ = installer
+    result = run(installer, extra_env={"DOCKER_NEEDS_INSTALL": "1", "SUDO_FAIL": "1"})
+    assert result.returncode != 0
+    assert not Path(env["SYSTEM_SETUP_LOG"]).exists()
+    assert not (root / "data").exists()

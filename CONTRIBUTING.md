@@ -21,8 +21,7 @@ API docs, AI guide, capability metadata, changelog and OpenAPI when interfaces c
 Pin new dependencies using uv.lock; keep them minimal and audit them. Do not commit
 secrets, local config, archives, logs, artifacts, virtualenvs or generated datasets.
 
-Use `ruff format`, `ruff check`, mypy and pytest. The CI templates in .test (pending activation by an authorized maintainer) use
-read-only GitHub permissions
+Use `ruff format`, `ruff check`, mypy and pytest. The active workflows in .github/workflows use read-only GitHub permissions
 and does not inject publication credentials into PR builds. Expect a review for
 queue race conditions, restart behavior and untrusted-code boundaries. Include actual
 test results and explicitly list skipped environments. The project is All Rights Reserved (ARR), developed by Anyactor. Obtain prior

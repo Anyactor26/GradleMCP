@@ -1,55 +1,97 @@
 # Installation
 
-## One-command Docker installation
+## One-command installation (including Docker prerequisites)
 
-Install Git, Docker Engine and Docker Compose v2 using your OS/provider's supported
-packages first. Your account must be able to use Docker; do not make its socket
-world-writable. Then run:
+From a downloaded/cloned checkout, run:
+
+```sh
+./install.sh
+```
+
+Or fetch the current implementation and install in a single command:
 
 ```sh
 git clone --branch arena/6626d3dc-gradlemcp https://github.com/Anyactor26/GradleMCP.git && cd GradleMCP && ./install.sh
 ```
 
-Or `./install.sh` from an existing checkout. The explicit branch selects the current
-implementation before it is merged to main. This is one installation command, not
-an assertion that every OS already includes Docker. There is deliberately no opaque
-remote root script or automatic modification of system package repositories.
-The local script is auditable and can be reviewed before execution.
+For a VPS without Git, the README provides a single command that first installs Git
+and CA certificates from the configured OS repositories. Git is only needed to fetch
+source; a downloaded checkout can run the installer directly. **Docker, Python, Java,
+Gradle and uv do not need manual installation for this path.**
 
-The installer checks daemon/Compose compatibility, builds both images, copies the
-complete example config only if none exists, reserves private storage, creates an
-`installer-agent` credential with read/build scope if the token file is missing,
-starts Compose with a health deadline, and checks readiness/authenticated access.
-Token output goes directly to `data/bootstrap-token.local` with mode 0600, never to
-logs or process argv. No host Python/Java/Gradle/uv is required.
+### Automatic platform support and privileges
 
-Re-running is supported: existing config/data/token are preserved, image builds use
-Docker's cache, and Compose reconciles the service. It is an install/reconcile command,
-not a source auto-updater (`git pull` is an explicit operator decision). Dependencies
-and base images need registry/PyPI access during build; default builds remain offline.
-`./install.sh --check` only checks prerequisites. Configuration/storage and secret
-paths must not be symlinks. Concurrent installers are blocked by a local directory lock.
+| Platform | Automatic missing Docker/Compose setup |
+|---|---|
+| Debian 12 (bookworm), 13 (trixie), amd64/arm64 | Supported, running systemd required |
+| Ubuntu 22.04 (jammy), 24.04 (noble), amd64/arm64 | Supported, running systemd required |
+| Existing compatible running Docker/Compose | Reused without package changes |
+| Other distributions/architectures, non-systemd containers/chroots | No automatic package setup; actionable manual guidance |
 
-If setup fails, it exits nonzero, cleans temporary credential/config files and releases
-its lock; it never announces success or silently rotates a pre-existing credential.
-A started service may remain running for inspection: `docker compose logs gradlemcp`.
-If a previous process was killed without cleanup, first confirm it stopped, then remove
-`.gradlemcp-install.lock`. If the token is lost/revoked or the DB was replaced, restore
-a consistent backup or explicitly manage credentials with the container CLI. An existing
-client name without its matching token is not automatically taken over by the installer.
-Use `docker compose run --rm gradlemcp credentials rotate installer-agent` deliberately,
-redirecting the new token to a private temporary file and replacing the token file safely.
-An operator-customized config may also require corresponding Compose mounts; the
-installer does not rewrite custom deployment paths or configure public HTTPS.
+Run as an administrator, or as a user who can authorize `sudo`; an OS password prompt
+is normal. The script escalates individual trusted operations, not a downloaded shell
+script. If the daemon needs privileged access, installation continues with `sudo docker`
+and reports that management prefix; **no group change or re-login is required**.
+`--check` never requests sudo and changes nothing. `--no-system-changes` prohibits
+package/repository/daemon changes, though accessing an existing daemon may use sudo.
 
-Default endpoints are localhost:8000 (REST) and localhost:8000/mcp/ (MCP). Use the token
-from its private file; configure public HTTPS separately. Stop with
-`docker compose stop gradlemcp`; start again with `docker compose up -d gradlemcp`.
-Docker controller-created database files may be root-owned on the host; use the
-container CLI for maintenance rather than mixing native and container installations.
+### Exactly what changes on a clean supported host
 
+1. Check systemd, distribution/architecture and conflicting runtime packages before
+   installing anything. Existing docker.io, containerd, runc, Snap/Podman integrations
+   are not silently removed or migrated. A compatible existing Docker skips bootstrap.
+2. Install CA certificates, curl and GnuPG using configured signed OS repositories.
+3. Fetch Docker's public APT key via HTTPS, verify primary fingerprint
+   `9DC858229FC7DD38854AE2D88D81803C0EBFCD88`, and enable its stable signed repository.
+   A mismatch fails closed; review legitimate upstream key rotation before updating.
+4. Write `/etc/apt/keyrings/gradlemcp-docker.asc` and
+   `/etc/apt/sources.list.d/gradlemcp-docker.sources`. Existing administrator-managed
+   `docker.sources`/`docker.list` are reused, not rewritten. Customized managed files
+   and symlinked destinations are refused. No `apt-key` or unauthenticated packages.
+5. Install docker-ce, docker-ce-cli, containerd.io, Buildx and Compose plugins; enable
+   and start Docker with systemd. For a compatible but stopped existing engine, only
+   startup is requested. No Docker-group grant/socket chmod is performed.
+6. Build controller/Java 17 worker, initialize private config/storage only if absent,
+   create an installer-agent read/build credential, start Compose and verify both
+   readiness and authenticated API access.
 
-## Supported controller
+The controller copies a modern standalone Docker CLI from docker:28-cli rather than
+Debian's older docker.io package; the controller never runs its own daemon. Pin base
+image digests according to your production provenance policy.
+
+All scripts are local and auditable. No `curl | sudo sh`, automatic production
+publication, public firewall opening or TLS/tunnel account configuration occurs.
+APT/registry/PyPI access is necessary during installation. Package-manager locks have
+a bounded wait. Bootstrap may leave installed prerequisite packages or valid repository
+files if a later operation fails; it does not promise transactional rollback of OS changes.
+
+### State, recovery and management
+
+The token is saved to `data/bootstrap-token.local` with mode 0600, never logged or
+passed in argv. Reruns preserve config/data/token and use image caches; source updates
+remain an explicit `git pull`. A local lock prevents concurrent installers. Config,
+data and token symlinks are refused. No silent credential rotation is performed.
+
+A failed install exits nonzero, releases its lock and cleans temporary app credential/
+config files. Inspect `docker compose logs gradlemcp` (or `sudo docker compose ...`)
+and `journalctl -u docker`. A started service may remain available for inspection.
+A lock left by SIGKILL must only be removed after confirming no installer is running.
+If the token is lost/revoked or the DB replaced, restore a consistent backup or use
+the container CLI to explicitly rotate installer-agent; protect the new token output.
+Operator-customized config/storage paths may need corresponding Compose mounts.
+
+Endpoints default to localhost:8000 and localhost:8000/mcp/. Configure public HTTPS
+separately. Stop/start with `(sudo) docker compose stop gradlemcp` /
+`(sudo) docker compose up -d gradlemcp`. Container-created database files may be root
+owned; use the container CLI rather than mixing native and container maintenance.
+
+**Verification boundary:** automatic package setup is exercised against controlled
+OS-tool/filesystem fixtures, including invalid keys, unsupported hosts, conflicts,
+failed downloads, sudo denial and daemon startup. A fresh-VM Docker installation was
+not possible in this sandbox. Existing Docker integration runs in the active workflow;
+do not equate mocked package tests with a verified installation on every VPS image.
+
+## Native/manual controller alternative
 
 Linux, Python 3.11+, Docker Engine with working cgroups/tmpfs, `uv` 0.13.1. An operator
 with Docker access is root-equivalent. Never expose the Docker API publicly. Docker

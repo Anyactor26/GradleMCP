@@ -2,6 +2,15 @@
 
 ## 0.1.0 — unreleased
 
+- Automatically provision Docker Engine/Compose from signed packages on Debian 12/13
+  and Ubuntu 22.04/24.04 (amd64/arm64, systemd), start the daemon and use sudo without
+  a re-login when necessary; no host Python setup required.
+- Ship a modern standalone Docker CLI in the controller instead of Debian's old
+  docker.io client, for compatibility with newly installed Engines.
+- Added read-only/no-system-changes options and bootstrap security/regression tests.
+- Preserve the owner's activated .github/workflows; fixed metadata test incorrectly
+  requiring a workflow README and updated stale activation instructions.
+
 - Changed the current project license to All Rights Reserved (ARR) and credited
   Anyactor as developer/copyright holder. Third-party licenses remain unchanged.
 - Moved inactive workflows to `.test/workflows/`; the owner can rename `.test` to

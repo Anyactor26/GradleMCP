@@ -21,40 +21,53 @@ in a persistent queue and run in disposable, resource-limited Docker containers.
 This is not universal Gradle compatibility or a hardened public hostile-code hosting
 platform. Read the [security boundary](docs/SECURITY_MODEL.md) before enabling access.
 Docker/JDK/Gradle execution and public tunnels could not be verified in the authoring
-sandbox. Real Docker integration tests and CI templates are supplied; see [verification](docs/VERIFICATION.md).
+sandbox. Real Docker integration tests and GitHub Actions workflows are supplied; see [verification](docs/VERIFICATION.md).
 
-## One-command installation
+## One-command installation — Docker is installed automatically
 
-On a **Linux Docker host**, with Git, Docker Engine and Docker Compose v2 installed:
+On **Debian 12/13 or Ubuntu 22.04/24.04**, amd64/arm64, with systemd and root/sudo
+access, you do **not** need to install Docker, Python, Java, Gradle or uv yourself.
+From an existing checkout, run **`./install.sh`**. Or clone and install in one command:
 
 ```sh
 git clone --branch arena/6626d3dc-gradlemcp https://github.com/Anyactor26/GradleMCP.git && cd GradleMCP && ./install.sh
 ```
 
-This is the current implementation branch; `main` is not updated until it is merged.
-Already cloned this branch? Just run **`./install.sh`**.
+If Git is also missing on a fresh VPS, this single command installs Git from your
+configured OS repositories first (no downloaded shell script is piped into root):
 
-The auditable installer builds the controller and Java 17 worker, initializes private
-configuration/storage, creates a scoped API credential, starts the service, and checks
-readiness **and authenticated API access**. It needs **no host Python, Java, Gradle or uv**.
-It does not run sudo, install Docker automatically, or pipe downloaded scripts into a shell.
-Review `install.sh` and the Dockerfiles first if you do not already trust this repository.
+```sh
+sh -c 'if ! command -v git >/dev/null 2>&1; then if [ "$(id -u)" = 0 ]; then apt-get update && apt-get install -y git ca-certificates; else sudo apt-get update && sudo apt-get install -y git ca-certificates; fi; fi && git clone --branch arena/6626d3dc-gradlemcp https://github.com/Anyactor26/GradleMCP.git && cd GradleMCP && ./install.sh'
+```
+
+This is the current implementation branch; `main` is not updated until it is merged.
+The installer automatically sets up missing Docker Engine/Compose from signed packages,
+starts Docker, builds both images, initializes private config/storage, creates a scoped
+credential, and verifies readiness **and authenticated API access**. Sudo may ask for
+your OS password; no re-login, manual Docker-group change or host Python setup is needed.
+Existing compatible Docker installs are reused. Review `install.sh`,
+`scripts/install-docker.sh` and the Dockerfiles before granting administrative access.
 
 - API: `http://127.0.0.1:8000`; MCP: `http://127.0.0.1:8000/mcp/`.
 - Token: `data/bootstrap-token.local` (0600), never printed by the installer.
-- Re-running preserves your configuration, data and existing token; it never silently rotates credentials.
-- `./install.sh --check` checks prerequisites without changing files/containers.
-- Public access still requires your HTTPS proxy/tunnel. Docker access is host-administrative.
+- Re-running preserves config/data/credentials; no silent rotation or runtime removal.
+- `./install.sh --check` is read-only and never requests sudo.
+- `./install.sh --no-system-changes` requires existing Docker; it does not install packages or start daemons.
+- No world-writable sockets, automatic Docker-group grants, or downloaded root shell scripts.
+- Unsupported hosts, conflicting runtimes, and nested/non-systemd environments fail with guidance.
+- Public access still requires your HTTPS proxy/tunnel. Docker control is host-administrative.
 
 ```sh
 export GRADLEMCP_TOKEN="$(cat data/bootstrap-token.local)"
-# Logs / stop / start later:
+# Prefix with sudo if the installer used privileged Docker access:
 docker compose logs -f gradlemcp
 docker compose stop gradlemcp
 docker compose up -d gradlemcp
 ```
 
-See [installation](docs/INSTALLATION.md) for prerequisites, recovery and manual alternatives.
+See [installation](docs/INSTALLATION.md) for the supported platform matrix, system
+changes, recovery, and manual alternatives. Fresh-OS package bootstrap has controlled
+tests but has not been verified on a fresh VM in the authoring sandbox.
 
 ## Manual / development installation
 
@@ -103,12 +116,12 @@ The controller (not workers) mounts the Docker socket and is root-equivalent on 
 Docker host. Bindings default to localhost. Configure HTTPS and `public_url` before
 public use. [Deployment and tunnel instructions](docs/DEPLOYMENT.md).
 
-## CI activation
+## Continuous integration
 
-The connected GitHub App cannot write `.github/workflows/` without additional
-permission. Complete workflows are preserved in **[.test](.test/README.md)**,
-but are **not active**. Rename `.test` to `.github` using your authorized maintainer
-account to activate them (workflow-write permission is still required). No GitHub CI success is claimed.
+The owner has activated the workflows under **[.github/workflows](.github/workflows)**.
+They remain there; no rename back to `.test` is required. The quality tests validate
+workflow configuration without requiring a `.github/README.md`. See
+[verification](docs/VERIFICATION.md) for actual local results and remaining environment checks.
 
 ## Documentation
 

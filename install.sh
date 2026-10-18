@@ -1,5 +1,5 @@
 #!/bin/sh
-# Auditable, local Docker installation. No sudo, package-manager changes or curl | sh.
+# Auditable local installation, including signed-package Docker setup on supported Linux.
 set -eu
 umask 077
 
@@ -8,37 +8,44 @@ cd "$ROOT"
 
 usage() {
     cat <<'HELP'
-Usage: ./install.sh [--check | --help]
+Usage: ./install.sh [--check | --no-system-changes | --help]
 
-Install and start GradleMCP with Docker Compose on Linux. Requires Docker Engine
-and Compose v2 supporting up --wait-timeout, plus permission to use the daemon.
+Install and start GradleMCP, automatically installing Docker Engine and Compose v2
+on Debian 12/13 or Ubuntu 22.04/24.04 (amd64/arm64, systemd) when needed.
+Root or sudo permission is required for OS package/daemon setup and Docker access.
 No host Python, Java, Gradle or uv installation is needed.
 
 Builds the controller and Java 17 worker, preserves existing config/data/token,
 creates a private bootstrap credential, starts the service and checks readiness.
 Listens on 127.0.0.1:8000 only. Configure HTTPS separately for remote access.
 
---check  Check prerequisites only; no installation files or containers are created.
---help   Show this help.
+--check              Read-only checks; never requests sudo or installs anything.
+--no-system-changes  Require an existing running Docker + Compose; no OS changes.
+--help               Show this help.
 
 Docker control grants host-administrative privileges. Review this script and the
-Dockerfiles before running it. This installer never runs sudo or installs Docker.
+Dockerfiles and scripts/install-docker.sh before running. Sudo may prompt for your
+OS password. Only signed APT packages are installed; no curl | sh is used.
+No Docker group changes or world-writable sockets are used.
 HELP
 }
 
 case "${1:-}" in
     --help|-h) usage; exit 0 ;;
-    --check|'') ;;
+    --check|--no-system-changes|'') ;;
     *) usage >&2; exit 2 ;;
 esac
 [ "$#" -le 1 ] || { usage >&2; exit 2; }
 
 fail() { printf 'GradleMCP installation failed: %s\n' "$*" >&2; exit 1; }
-command -v docker >/dev/null 2>&1 || fail 'Install Docker Engine and Docker Compose v2 first: https://docs.docker.com/engine/install/'
-docker info >/dev/null 2>&1 || fail 'Docker daemon is unavailable or your account lacks permission. Start Docker and review daemon access; do not chmod its socket world-writable.'
-docker compose version >/dev/null 2>&1 || fail 'Docker Compose v2 is required (docker compose).'
-docker compose up --help | grep -q -- '--wait-timeout' || fail 'Upgrade Docker Compose: up --wait-timeout is required (Compose 2.20+ recommended).'
+docker_cli_ready() {
+    command -v docker >/dev/null 2>&1 &&
+        command docker compose version >/dev/null 2>&1 &&
+        command docker compose up --help 2>/dev/null | grep -q -- '--wait-timeout'
+}
 if [ "${1:-}" = --check ]; then
+    docker_cli_ready || fail 'Docker Engine + Compose v2 with up --wait-timeout are not available. Run ./install.sh to set them up automatically on supported Linux.'
+    command docker info >/dev/null 2>&1 || fail 'Docker is unavailable to this account. Read-only check made no changes; run ./install.sh to start/use Docker with sudo.'
     printf 'Prerequisites available. Docker access is host-administrative. No files changed.\n'
     exit 0
 fi
@@ -55,6 +62,42 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+
+# Escalate individual trusted operations, not the whole checkout or remote scripts.
+USE_SUDO=0
+as_root() {
+    if [ "$(id -u)" = 0 ]; then
+        "$@"
+    else
+        command -v sudo >/dev/null 2>&1 || fail 'Root or sudo is needed for automatic setup. Ask your administrator to run this installer; no Python/Java setup is required.'
+        sudo -- "$@"
+    fi
+}
+if ! docker_cli_ready; then
+    [ "${1:-}" != --no-system-changes ] || fail 'Docker/Compose prerequisites are missing or outdated; OS changes disabled.'
+    printf 'Setting up Docker from signed packages (sudo may request your OS password)...\n'
+    as_root sh "$ROOT/scripts/install-docker.sh"
+    docker_cli_ready || fail 'Docker/Compose installation did not provide the required CLI features.'
+fi
+if ! command docker info >/dev/null 2>&1; then
+    # Existing daemon may simply require privileged access; avoid unnecessary service changes.
+    if [ "$(id -u)" != 0 ] && command -v sudo >/dev/null 2>&1 && sudo -- docker info >/dev/null 2>&1; then
+        USE_SUDO=1
+    else
+        [ "${1:-}" != --no-system-changes ] || fail 'Docker daemon unavailable; OS changes disabled.'
+        as_root sh "$ROOT/scripts/install-docker.sh" --start-only
+        if command docker info >/dev/null 2>&1; then
+            USE_SUDO=0
+        elif [ "$(id -u)" != 0 ] && as_root docker info >/dev/null 2>&1; then
+            USE_SUDO=1
+        else
+            fail 'Docker daemon is still unavailable after startup. Inspect journalctl -u docker; never chmod the socket world-writable.'
+        fi
+    fi
+fi
+docker() {
+    if [ "$USE_SUDO" = 1 ]; then sudo -- docker "$@"; else command docker "$@"; fi
+}
 
 [ ! -L gradlemcp.json ] || fail 'Refusing a symlink at gradlemcp.json.'
 [ ! -L data ] || fail 'Refusing a symlink at data; configure custom storage explicitly instead.'
@@ -96,6 +139,10 @@ docker compose exec -T gradlemcp python -c "import urllib.request; from pathlib 
 printf '\nGradleMCP is ready at http://127.0.0.1:8000\n'
 printf 'Private API token saved to %s/%s (0600); token not printed.\n' "$ROOT" "$TOKEN"
 printf 'MCP: http://127.0.0.1:8000/mcp/ (send the bearer token).\n'
-printf 'Manage: docker compose logs -f gradlemcp | docker compose stop gradlemcp\n'
+if [ "$USE_SUDO" = 1 ]; then
+    printf 'Manage: sudo docker compose logs -f gradlemcp | sudo docker compose stop gradlemcp\n'
+else
+    printf 'Manage: docker compose logs -f gradlemcp | docker compose stop gradlemcp\n'
+fi
 printf 'Re-run ./install.sh safely; config, data and existing credentials are preserved.\n'
 printf 'Remote access requires an explicitly configured HTTPS proxy/tunnel; see docs/DEPLOYMENT.md.\n'
