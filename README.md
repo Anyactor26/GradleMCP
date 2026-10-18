@@ -36,7 +36,8 @@ git clone --branch main https://github.com/Anyactor26/GradleMCP.git && cd Gradle
 If Git is also missing on a fresh VPS, this single command installs Git from your
 configured OS repositories first (no downloaded shell script is piped into root):
 
-```sh -c 'if ! command -v git >/dev/null 2>&1; then if [ "$(id -u)" = 0 ]; then apt-get update && apt-get install -y git ca-certificates; else sudo apt-get update && sudo apt-get install -y git ca-certificates; fi; fi && git clone --branch main https://github.com/Anyactor26/GradleMCP.git && cd GradleMCP && ./install.sh'
+```sh
+sh -c 'if ! command -v git >/dev/null 2>&1; then if [ "$(id -u)" = 0 ]; then apt-get update && apt-get install -y git ca-certificates; else sudo apt-get update && sudo apt-get install -y git ca-certificates; fi; fi && git clone --branch main https://github.com/Anyactor26/GradleMCP.git && cd GradleMCP && ./install.sh'
 ```
 
 This is the current implementation branch; `main` is not updated until it is merged.
