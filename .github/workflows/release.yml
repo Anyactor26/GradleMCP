@@ -1,49 +1,20 @@
 name: Build release candidate
-
 on:
-workflow_dispatch:
-inputs:
-branch:
-description: "Branch to build"
-required: true
-default: "main"
-type: string
-
+  workflow_dispatch:
 permissions:
-contents: read
-
+  contents: read
 jobs:
-package:
-name: Build and package release candidate
-runs-on: ubuntu-latest
-
-steps:
-  - name: Check out repository
-    uses: actions/checkout@v4
-    with:
-      ref: ${{ inputs.branch }}
-
-  - name: Set up uv and Python
-    uses: astral-sh/setup-uv@v6
-    with:
-      version: "0.13.1"
-      python-version: "3.11"
-
-  - name: Lint, type-check, test, and build
-    run: |
-      uv sync --locked
-      make lint typecheck test
-      uv build
-
-  - name: Generate SHA-256 checksums
-    run: sha256sum dist/* > SHA256SUMS
-
-  - name: Upload release candidate
-    uses: actions/upload-artifact@v4
-    with:
-      name: release-candidate
-      path: |
-        dist/*
-        SHA256SUMS
-      if-no-files-found: error
-      retention-days: 14
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: {version: "0.13.1", python-version: "3.11"}
+      - run: uv sync --locked && make lint typecheck test && uv build
+      - run: sha256sum dist/* > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate
+          path: |
+            dist/*
+            SHA256SUMS
