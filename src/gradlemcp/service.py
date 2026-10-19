@@ -67,6 +67,18 @@ class Service:
             "wrapper_enabled": self.config.wrapper_enabled,
             "states": sorted(TERMINAL | ACTIVE | {"queued"}),
             "documentation": "docs/AI_GUIDE.md",
+            "protocols": {
+                "rest": {
+                    "base_path": "/api/v1",
+                    "authentication": "Authorization: Bearer <token>",
+                    "zip_upload_content_type": "application/zip",
+                },
+                "mcp": {
+                    "transport": "streamable-http",
+                    "path": "/mcp/",
+                    "authentication": "Authorization: Bearer <token>",
+                },
+            },
             "git_sources": False,
             "isolation": "Docker; stronger VM isolation recommended for hostile tenants",
             "automatic_provisioning": "Approved worker images only; auto_pull is operator opt-in",

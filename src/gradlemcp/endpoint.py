@@ -7,7 +7,11 @@ def endpoint_status(config):
         "exposure_mode": config.exposure,
         "connection_status": "not_probed",
         "temporary": False,
-        "diagnostic": "Configured URL is not proof of external reachability",
+        "rest_base_path": "/api/v1",
+        "mcp_path": "/mcp/",
+        "mcp_transport": "streamable-http",
+        "authentication": "Authorization: Bearer <token>",
+        "diagnostic": "Configured URL is not proof of external reachability; verify DNS, firewall and TLS from an external network",
     }
     if config.exposure == "private":
         result["connection_status"] = "private"

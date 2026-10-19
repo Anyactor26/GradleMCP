@@ -1,13 +1,10 @@
-# Delivery verification — 2026-10-18
+# Delivery verification — 2026-10-19
 
 This is a source implementation/release candidate, **not a declaration that all
-production deployment requirements have been verified**. The implementation is delivered on `arena/6626d3dc-gradlemcp`. The owner activated
-`.github/workflows/ci.yml` and `release.yml`; this update preserves those files
-unchanged and does not restore `.test`. The owner's CI log showed a missing
-`.github/README.md` assertion (85 passed, 1 failed, 1 skipped, 7 deselected); that
-unnecessary assertion is removed and covered by regression tests. The current app
-cannot query Actions runs (403: Actions-read permission), so no new remote green
-result is claimed. Local results follow. No registry/publication/tunnel claim is made.
+production deployment requirements have been verified**. The active workflows are in
+`.github/workflows/`; this document avoids hard-coding a temporary development branch.
+CI configuration is exercised locally, but remote Actions status is not claimed here.
+No registry, publication or live-tunnel claim is made. Local results follow.
 
 ## Executed in the authoring environment
 
@@ -19,25 +16,27 @@ PostgreSQL service, external tunnel account or publication credentials were avai
 | `uv sync --locked` | Passed; locked dependencies installed |
 | `ruff check src tests examples/client.py` | Passed |
 | `ruff format --check src tests examples/client.py` | Passed |
-| `mypy src/gradlemcp` | Passed, 14 source files; non-strict check_untyped_defs mode |
-| `pytest -q` | **112 passed, 8 skipped** |
-| Non-Docker suite (`make test`) | Same 112 passing tests; PostgreSQL skipped, 7 Docker tests deselected |
-| Dependency audit (`pip-audit --skip-editable`) | No known vulnerabilities reported for installed audited dependencies; project itself skipped as editable |
-| `uv build` | Wheel and sdist produced |
-| Fresh wheel install | Installed into separate environment with locked runtime dependencies; `gradlemcp --help` succeeded |
-| Distribution inspection | Source/docs included; worker module/license in wheel; no data, tokens, virtualenv or local configuration packaged |
-| Generated OpenAPI | Regenerated from application; equality checked against runtime schema; structured validation/service error schemas included |
+| `mypy src/gradlemcp` | Passed, 16 source files; non-strict `check_untyped_defs` mode |
+| `pytest -q` | **123 passed, 8 skipped** |
+| Non-Docker suite (`make test`) | 123 passed, 1 skipped; 7 Docker tests deselected |
+| Dependency audit (`pip-audit --skip-editable`) | No known vulnerabilities reported for audited dependencies; project itself skipped as editable |
+| `uv build` | Wheel and source distribution produced |
+| Distribution inspection | Verified the wheel includes the UI HTML/CSS/JS assets; no local tokens/configuration are packaged |
+| Generated OpenAPI | Regenerated from application and matched the checked-in schema; structured error schemas remain included |
+| Browser UI JavaScript | `node --check src/gradlemcp/web/assets/app.js` passed |
 | CLI initialization/validation | `init`, `config validate`, credential creation/revocation exercised |
 | Live CLI startup | `serve --host 0.0.0.0 --port 8000` started and shut down cleanly |
 | Live HTTP smoke | health 200; missing-Docker readiness **503**; unauthenticated capabilities 401; authenticated capabilities/queue/OpenAPI 200 |
 | `doctor` | Correctly returned exit 1 with docker_cli=false and docker_daemon=false; not represented as a successful worker check |
 | Local documentation links | Checked; all referenced repository documentation exists |
 
-Shell syntax checks pass for both `install.sh` and `scripts/install-docker.sh`.
-Controlled tests cover automatic prerequisite setup, sudo/no-relogin operation,
-read-only and no-system-changes modes, daemon-only startup, refused sudo, supported
-Debian/Ubuntu variants, rejected signing keys, failed downloads, runtime conflicts,
-unsupported/non-systemd hosts, source-file preservation and private app credentials.
+Shell syntax checks pass for `install.sh`, `gmc` and `scripts/install-docker.sh`.
+Regression tests cover the optional UI (disabled by default, static assets, authentication
+and same-origin enforcement), explicit MCP Host/Origin allowlists, agent endpoint
+metadata, and the management commands that toggle UI or public bindings. Installer
+fixtures cover automatic prerequisites, sudo/no-relogin operation, read-only and
+no-system-changes modes, daemon startup, refused sudo, supported OS variants, rejected
+signing keys, failed downloads, runtime conflicts, unsupported hosts and private files.
 The bootstrap tests use a staged filesystem and fake OS/package/network tools:
 **they do not execute real APT, sudo, Docker installation or a fresh VM**.
 
@@ -104,13 +103,14 @@ Before claiming a production-ready release:
 Implemented: single-controller Docker execution, SQLite/PostgreSQL database adapters,
 ZIP source ingestion, approved image-based automatic JDK/Gradle provisioning,
 managed/wrapper Gradle, HTTP/MCP lifecycle, optional controlled publication,
-operator-managed exposure with truthful status reporting.
+operator-managed exposure with truthful status reporting, optional authenticated
+operator dashboard, and lifecycle/HTTPS helper commands for Docker deployments.
 
 Not implemented: Git repository fetching/private Git credentials, native host build
 execution, transparent egress proxy, automatic arbitrary JDK/SDK executable downloads,
 MCP OAuth authorization server/discovery, distributed multi-controller scheduling,
-web dashboard, automatic VM provisioning, per-repository publication staging/approval
-UI, cross-client project-sharing ACLs, named editor compatibility certification.
+automatic VM provisioning, per-repository publication staging/approval UI, cross-client
+project-sharing ACLs, named editor compatibility certification.
 These are not advertised as available capabilities. Git input and advanced exposure
 providers are optional extension opportunities, not placeholder endpoints.
 

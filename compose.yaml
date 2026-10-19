@@ -2,7 +2,10 @@ services:
   gradlemcp:
     build: .
     restart: unless-stopped
-    ports: ["127.0.0.1:8000:8000"]
+    ports:
+      - "${GRADLEMCP_BIND_ADDRESS:-127.0.0.1}:8000:8000"
+    env_file:
+      - .gradlemcp.env
     volumes:
       - ./data:/var/lib/gradlemcp/data
       - ./gradlemcp.json:/var/lib/gradlemcp/gradlemcp.json:ro
@@ -13,8 +16,26 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 10s
     logging:
       options: {max-size: "10m", max-file: "3"}
+  caddy:
+    image: caddy:2-alpine
+    profiles: [tls]
+    environment:
+      GRADLEMCP_DOMAIN: ${GRADLEMCP_DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      gradlemcp:
+        condition: service_healthy
+    restart: unless-stopped
   cloudflared:
     image: cloudflare/cloudflared:2026.9.1
     profiles: [cloudflare]
@@ -27,6 +48,9 @@ services:
     command: start --all --config /etc/ngrok.yml
     volumes: ["./deploy/ngrok.local.yml:/etc/ngrok.yml:ro"]
     restart: unless-stopped
+volumes:
+  caddy_data:
+  caddy_config:
 secrets:
   tunnel_token:
     file: ./deploy/cloudflare-token.local

@@ -5,7 +5,13 @@
 | 401 unauthorized | Check Bearer header; create a new client if revoked; never paste tokens into issues. |
 | 403 forbidden | Check scopes; publish permission and admin are intentionally separate. |
 | 404 known job/artifact | Ownership may differ, or source/artifacts expired; use original client. |
-| 421 MCP Invalid Host | Set public_url to the actual HTTPS origin and restart; keep SDK DNS-rebinding checks enabled. |
+| 421 MCP Invalid Host / 403 Invalid Origin | Set `public_url` to the exact HTTPS origin, or add the exact VPS hostname/IP to `mcp_allowed_hosts` and (for clients sending an Origin header) `mcp_allowed_origins`; restart and keep SDK DNS-rebinding checks enabled. `./gmc expose https DOMAIN` configures this for Caddy. |
+| VPS IP:8000 is unreachable | Default Compose binding is localhost-only. Use `./gmc expose https DOMAIN` for public TLS, or `./gmc expose direct IP` for a trusted private/VPN test; open the required port in both OS and provider firewalls. |
+| Agent reports connection refused / timeout | Run `./gmc doctor`, check `./gmc status`, server bind address, DNS/NAT and provider security group from outside. The app cannot open VPS-provider firewall ports or prove internet reachability. |
+| Agent reports 401 / MCP initializes but tools fail | Use the token from `./gmc token` or create one with `./gmc agent create NAME read,build`; send `Authorization: Bearer <token>` on every request. |
+| MCP URL or transport confusion | Use Streamable HTTP at `https://HOST/mcp/` (trailing slash); REST base is `https://HOST/api/v1`. This release does not expose legacy SSE or OAuth discovery. |
+| Dashboard `/ui/` returns 404 | Enable it with `./gmc ui on`; it is disabled by default. The API remains authenticated, and the UI asks for a token. |
+| Browser UI reports origin_rejected | Use the configured public HTTPS URL, or access the UI from the same origin as its API. For a reverse proxy, set `public_url` exactly (scheme/host/port) and preserve Host/Authorization. |
 | 422 invalid_request | Inspect OpenAPI; tasks are names, not shell commands/options; no unknown fields. |
 | 429 queue/rate limit | Back off and inspect queue; don't generate many replacement jobs. |
 | queued | Not a failure. A worker slot or client-active quota is busy; no ETA is guaranteed. |

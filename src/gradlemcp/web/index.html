@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="Monitor and manage isolated Gradle builds with GradleMCP.">
+  <title>GradleMCP · Build control</title>
+  <link rel="stylesheet" href="/ui/assets/styles.css">
+</head>
+<body>
+  <section class="auth-shell" id="loginScreen" aria-labelledby="loginTitle">
+    <div class="auth-story">
+      <div class="brand-lockup">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>Gradle<span class="brand-accent">MCP</span></span>
+      </div>
+      <div class="story-content">
+        <p class="eyebrow">REMOTE BUILD CONTROL PLANE</p>
+        <h1>Ship builds.<br><span>Keep control.</span></h1>
+        <p class="story-description">A clear view of your queue, isolated Gradle jobs and the artifacts they produce.</p>
+        <div class="story-points">
+          <div><span class="point-icon">01</span><span>Submit from your agent or compile by hand</span></div>
+          <div><span class="point-icon">02</span><span>Follow progress, logs and diagnostics</span></div>
+          <div><span class="point-icon">03</span><span>Retrieve verified build artifacts</span></div>
+        </div>
+      </div>
+      <div class="story-foot"><span class="live-dot"></span> Self-hosted · Docker-isolated · Agent-ready</div>
+      <div class="story-orb story-orb-one"></div><div class="story-orb story-orb-two"></div>
+    </div>
+    <div class="auth-panel">
+      <div class="mobile-brand brand-lockup">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>Gradle<span class="brand-accent">MCP</span></span>
+      </div>
+      <div class="auth-card">
+        <div class="auth-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5M6 10.5h12a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 18 21.5H6A1.5 1.5 0 0 1 4.5 20v-8A1.5 1.5 0 0 1 6 10.5Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M12 14.5v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </div>
+        <p class="eyebrow">SECURE OPERATOR ACCESS</p>
+        <h2 id="loginTitle">Connect to your server</h2>
+        <p class="muted">Enter a GradleMCP API token with <code>read</code> and <code>build</code> scopes to open your workspace.</p>
+        <form id="loginForm" autocomplete="off">
+          <label for="tokenInput">API token</label>
+          <div class="token-input-wrap">
+            <input id="tokenInput" name="token" type="password" placeholder="installer-agent.…" autocomplete="off" required spellcheck="false">
+            <button class="icon-button reveal-button" id="revealToken" type="button" aria-label="Show token">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="2.6" stroke="currentColor" stroke-width="1.6"/></svg>
+            </button>
+          </div>
+          <button class="button button-primary button-wide" id="connectButton" type="submit">
+            <span>Connect workspace</span><svg viewBox="0 0 24 24" fill="none"><path d="M5 12h13m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="form-error" id="loginError" role="alert" hidden></div>
+        </form>
+        <div class="token-help">
+          <div class="help-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/><path d="M9.8 9a2.3 2.3 0 1 1 4.1 1.4c-.9 1-1.9 1.2-1.9 2.8m0 3h.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+          <div><strong>Need your token?</strong><span>On the server, run <code>./gmc token</code>. It is kept in this page's memory only.</span></div>
+        </div>
+        <div class="auth-footer"><span id="loginEndpoint">Connecting to this GradleMCP server</span><span class="secure-label"><span class="live-dot"></span> Token never saved</span></div>
+      </div>
+      <div class="auth-bottom">GradleMCP <span>·</span> Self-hosted remote Gradle execution</div>
+    </div>
+  </section>
+
+  <div class="workspace" id="workspace" hidden>
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>Gradle<span class="brand-accent">MCP</span></span>
+        <span class="version-tag" id="versionTag">v0.1</span>
+      </div>
+      <div class="server-card">
+        <span class="server-indicator" id="serverIndicator"></span>
+        <div class="server-copy"><strong>Build server</strong><span id="serverState">Checking status…</span></div>
+        <button class="icon-button server-refresh" id="refreshButton" aria-label="Refresh data" title="Refresh">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M20 7v5h-5M4 17v-5h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.6 9a7 7 0 0 1 11.8-2L20 12M4 12l2.6 5a7 7 0 0 0 11.8-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <div class="nav-label">WORKSPACE</div>
+      <nav class="main-nav" aria-label="Main navigation">
+        <button class="nav-item active" data-page="overview"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="8" rx="1.4" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="3" width="7" height="5" rx="1.4" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="11" width="7" height="10" rx="1.4" stroke="currentColor" stroke-width="1.6"/><rect x="3" y="15" width="7" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6"/></svg><span>Overview</span></button>
+        <button class="nav-item" data-page="builds"><svg viewBox="0 0 24 24" fill="none"><path d="m12 3 9 5v8l-9 5-9-5V8l9-5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m3.5 8.5 8.5 5 8.5-5M12 13.5V21M7.5 5.5l9 5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg><span>Builds</span><span class="nav-count" id="buildCount">0</span></button>
+        <button class="nav-item" data-page="compile"><svg viewBox="0 0 24 24" fill="none"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Compile project</span></button>
+      </nav>
+      <div class="nav-label nav-label-spaced">INTEGRATION</div>
+      <nav class="main-nav" aria-label="Integration navigation">
+        <button class="nav-item" data-page="agent"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="6" width="16" height="13" rx="2.5" stroke="currentColor" stroke-width="1.6"/><path d="M9 11h.01M15 11h.01M9 15h6M12 3v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M2 11v3m20-3v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Agent setup</span></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="sidebar-help"><div class="help-ring">?</div><div><strong>Build something great</strong><span>Isolated builds, ready when you are.</span></div></div>
+        <button class="profile-row" id="logoutButton"><span class="avatar-mark">GM</span><span class="profile-copy"><strong>API session</strong><span>Connected securely</span></span><svg class="logout-icon" viewBox="0 0 24 24" fill="none"><path d="M10 17l5-5-5-5m5 5H3m10-9h5a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
+    </aside>
+
+    <div class="main-shell">
+      <header class="topbar">
+        <button class="icon-button mobile-menu" id="menuButton" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+        <div class="breadcrumbs"><span>Workspace</span><span class="crumb-separator">/</span><strong id="pageHeading">Overview</strong></div>
+        <div class="topbar-actions"><span class="topbar-endpoint" id="topbarEndpoint">This server</span><span class="topbar-divider"></span><button class="icon-button top-refresh" id="topRefresh" aria-label="Refresh data" title="Refresh"><svg viewBox="0 0 24 24" fill="none"><path d="M20 7v5h-5M4 17v-5h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.6 9a7 7 0 0 1 11.8-2L20 12M4 12l2.6 5a7 7 0 0 0 11.8-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="top-avatar" title="Log out" id="topLogout">GM</button></div>
+      </header>
+
+      <main class="content-area">
+        <section class="page-view" id="page-overview">
+          <div class="page-intro intro-row"><div><p class="eyebrow">YOUR BUILD WORKSPACE</p><h1>Good builds start here<span class="title-period">.</span></h1><p class="muted">Monitor the queue, keep an eye on active jobs, and jump back into your recent work.</p></div><button class="button button-primary" data-goto="compile"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14m-7-7h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg><span>New build</span></button></div>
+          <div class="metric-grid">
+            <article class="metric-card metric-primary"><div class="metric-top"><span class="metric-label">Queue depth</span><span class="metric-icon icon-violet"><svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h11M4 18h7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="19" cy="16" r="3" stroke="currentColor" stroke-width="1.7"/></svg></span></div><div class="metric-value" id="metricQueued">—</div><div class="metric-foot"><span id="metricQueueNote">Waiting for first update</span><span class="metric-trend">QUEUED</span></div></article>
+            <article class="metric-card"><div class="metric-top"><span class="metric-label">Active builds</span><span class="metric-icon icon-blue"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.7"/><path d="M12 7v5l3.5 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="metric-value" id="metricActive">—</div><div class="metric-foot"><span id="metricCapacity">Worker capacity</span><span class="metric-dot"></span></div></article>
+            <article class="metric-card"><div class="metric-top"><span class="metric-label">Available workers</span><span class="metric-icon icon-green"><svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="4" width="17" height="13" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M8 21h8m-4-4v4m-4-9 2.5-2.5L12 11l3-3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="metric-value" id="metricWorkers">—</div><div class="metric-foot"><span>Ready for the next job</span><span class="metric-dot green-dot"></span></div></article>
+            <article class="metric-card"><div class="metric-top"><span class="metric-label">Free storage</span><span class="metric-icon icon-amber"><svg viewBox="0 0 24 24" fill="none"><ellipse cx="12" cy="5" rx="8" ry="3" stroke="currentColor" stroke-width="1.7"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" stroke="currentColor" stroke-width="1.7"/></svg></span></div><div class="metric-value" id="metricStorage">—</div><div class="metric-foot"><span>Host storage available</span><span class="metric-dot amber-dot"></span></div></article>
+          </div>
+          <div class="dashboard-grid">
+            <section class="panel recent-panel"><div class="panel-heading"><div><p class="eyebrow">ACTIVITY</p><h2>Recent builds</h2></div><button class="text-button" data-goto="builds">View all <span>→</span></button></div><div id="recentBuilds" class="build-list"><div class="loading-row"><span class="spinner"></span>Loading build activity…</div></div></section>
+            <section class="panel connection-panel"><div class="panel-heading"><div><p class="eyebrow">SYSTEM</p><h2>Service status</h2></div><span class="status-chip status-unknown" id="healthChip"><span class="live-dot"></span>Checking</span></div><div class="health-visual"><div class="health-ring"><span class="health-ring-inner"><svg viewBox="0 0 24 24" fill="none"><path d="m6 12 4 4 8-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div><strong id="healthTitle">Checking your server</strong><p id="healthText">Waiting for an authenticated health check.</p></div></div><div class="connection-meta"><div><span>REST API</span><code>/api/v1</code></div><div><span>MCP endpoint</span><code>/mcp/</code></div><div><span>Transport</span><code>Streamable HTTP</code></div></div><button class="button button-quiet button-wide" data-goto="agent">View agent connection details <span>→</span></button></section>
+          </div>
+          <div class="dashboard-footer"><span>Isolated builds. Clear status. No guesswork.</span><span id="lastUpdated">Not refreshed yet</span></div>
+        </section>
+
+        <section class="page-view" id="page-builds" hidden>
+          <div class="page-intro"><p class="eyebrow">BUILD HISTORY</p><div class="title-row"><div><h1>Your builds<span class="title-period">.</span></h1><p class="muted">Browse build jobs submitted by this API client.</p></div><button class="button button-primary" data-goto="compile"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14m-7-7h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>New build</button></div></div>
+          <section class="panel table-panel"><div class="panel-toolbar"><div><strong>All jobs</strong><span class="muted" id="buildListCount">Loading…</span></div><div class="toolbar-controls"><select id="stateFilter" aria-label="Filter builds by state"><option value="all">All states</option><option value="active">Active</option><option value="queued">Queued</option><option value="succeeded">Succeeded</option><option value="failed">Failed</option></select><button class="button button-quiet small-button" id="buildRefresh">Refresh</button></div></div><div class="table-wrap"><table><thead><tr><th>BUILD</th><th>STATE</th><th>TASK</th><th>CREATED</th><th>DURATION</th><th></th></tr></thead><tbody id="buildTable"><tr><td colspan="6" class="empty-cell">Loading builds…</td></tr></tbody></table></div></section>
+          <section class="panel build-detail-panel" id="buildDetail" hidden><div class="detail-heading"><div><p class="eyebrow">BUILD DETAILS</p><h2 id="detailTitle">Build</h2></div><button class="icon-button" id="closeDetail" aria-label="Close build details">×</button></div><div class="detail-meta" id="detailMeta"></div><div class="detail-diagnostic" id="detailDiagnostic" hidden></div><div class="detail-actions" id="detailActions"></div><div class="panel-heading logs-heading"><div><p class="eyebrow">OUTPUT</p><h3>Build logs</h3></div><button class="text-button" id="refreshLogs">Refresh logs</button></div><pre class="log-output" id="detailLogs">Select a build to see its logs.</pre><div class="artifacts-heading"><p class="eyebrow">OUTPUT FILES</p><div id="detailArtifacts" class="artifact-list"></div></div></section>
+        </section>
+
+        <section class="page-view" id="page-compile" hidden>
+          <div class="page-intro"><p class="eyebrow">MANUAL BUILD</p><h1>Compile a project<span class="title-period">.</span></h1><p class="muted">Upload an immutable ZIP, choose Gradle tasks and submit it to an isolated worker.</p></div>
+          <div class="compile-layout"><section class="panel compile-panel"><div class="panel-heading"><div><p class="eyebrow">BUILD CONFIGURATION</p><h2>New build job</h2></div><span class="secure-chip"><span class="live-dot"></span> Runs in Docker isolation</span></div>
+            <form id="compileForm">
+              <div class="form-section-label"><span>01</span> PROJECT SOURCE</div>
+              <label class="upload-drop" id="uploadDrop" for="projectZip"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M4 15.5v3A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5v-3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span><strong id="fileName">Choose a project ZIP</strong><span id="fileHint">Drop a .zip here or browse your files · upload limit depends on server policy</span><input id="projectZip" type="file" accept=".zip,application/zip" hidden></label>
+              <div class="field-divider"><span>or use an existing project ID</span></div>
+              <label for="projectId">Project ID <span class="optional-label">Optional if ZIP selected</span></label><input id="projectId" type="text" placeholder="Paste a project ID from a previous upload" spellcheck="false">
+              <div class="form-section-label section-spaced"><span>02</span> TASK & ENVIRONMENT</div>
+              <div class="field-grid"><div><label for="tasksInput">Gradle tasks</label><input id="tasksInput" type="text" value="build" placeholder="build, test"><span class="field-hint">Comma-separated task names, not CLI flags.</span></div><div><label for="toolchainSelect">Toolchain</label><select id="toolchainSelect"><option value="">Auto-select from project</option></select><span class="field-hint" id="toolchainHint">Approved by your server operator.</span></div></div>
+              <div class="field-grid field-grid-secondary"><div><label for="subdirectoryInput">Project subdirectory</label><input id="subdirectoryInput" type="text" value="." placeholder="."><span class="field-hint">Path to the Gradle root inside the ZIP.</span></div><div><label for="artifactsInput">Artifact patterns</label><input id="artifactsInput" type="text" value="**/build/libs/*, **/build/reports/**" placeholder="**/build/libs/*"><span class="field-hint">Comma-separated paths to collect.</span></div></div>
+              <div class="form-error" id="compileError" role="alert" hidden></div><div class="compile-footer"><span class="compile-footnote"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3 4 6v5c0 5 3.4 8.2 8 10 4.6-1.8 8-5 8-10V6l-8-3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Submitted builds run in a disposable, resource-limited container.</span><button class="button button-primary" id="submitBuild" type="submit">Submit build <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h13m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
+            </form>
+          </section><aside class="compile-aside"><div class="aside-card aside-tip"><span class="tip-icon">✦</span><p class="eyebrow">QUICK TIP</p><h3>Start with <code>build</code></h3><p>GradleMCP checks your project against the approved JDK and SDK profiles before it queues the job.</p></div><div class="aside-card aside-flow"><p class="eyebrow">WHAT HAPPENS NEXT</p><div class="flow-step"><span>1</span><div><strong>Upload & inspect</strong><p>Project files are validated before execution.</p></div></div><div class="flow-step"><span>2</span><div><strong>Queue an isolated build</strong><p>HTTP 202 means queued, not completed.</p></div></div><div class="flow-step"><span>3</span><div><strong>Review & download</strong><p>Follow logs, diagnostics and artifacts.</p></div></div></div></aside></div>
+        </section>
+
+        <section class="page-view" id="page-agent" hidden>
+          <div class="page-intro"><p class="eyebrow">CONNECT YOUR TOOLS</p><h1>Agent setup<span class="title-period">.</span></h1><p class="muted">Copy the exact endpoint paths and transport details into your AI agent or custom client.</p></div>
+          <div class="integration-banner"><div class="integration-symbol"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="6" width="16" height="13" rx="2.5" stroke="currentColor" stroke-width="1.6"/><path d="M9 11h.01M15 11h.01M9 15h6M12 3v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div><div><strong>Streamable HTTP MCP · Bearer authentication</strong><p>Use the MCP endpoint below, send the API token in the <code>Authorization</code> header, and let the client discover tools with <code>tools/list</code>.</p></div><span class="status-chip status-live"><span class="live-dot"></span> Protocol ready</span></div>
+          <div class="integration-grid"><section class="panel endpoint-panel"><div class="panel-heading"><div><p class="eyebrow">SERVER ENDPOINTS</p><h2>Connection details</h2></div><button class="text-button" id="copyEndpoints">Copy all</button></div><div class="endpoint-row"><div><span class="endpoint-label">MCP endpoint <span class="recommended-tag">RECOMMENDED FOR AGENTS</span></span><code class="endpoint-value" id="mcpEndpoint">—</code></div><button class="copy-button" data-copy="mcpEndpoint">Copy</button></div><div class="endpoint-row"><div><span class="endpoint-label">REST API base</span><code class="endpoint-value" id="restEndpoint">—</code></div><button class="copy-button" data-copy="restEndpoint">Copy</button></div><div class="endpoint-row"><div><span class="endpoint-label">OpenAPI schema</span><code class="endpoint-value" id="openApiEndpoint">—</code></div><button class="copy-button" data-copy="openApiEndpoint">Copy</button></div><div class="endpoint-warning" id="endpointWarning" hidden><span>!</span><p></p></div></section>
+            <section class="panel config-panel"><div class="panel-heading"><div><p class="eyebrow">CLIENT CONFIGURATION</p><h2>Remote MCP client</h2></div><button class="copy-button" id="copyMcpConfig">Copy JSON</button></div><p class="muted">Generic Streamable HTTP configuration. Adapt field names to your agent and inject the token from its secret store.</p><pre class="config-snippet" id="mcpConfigSnippet"></pre><div class="config-note"><span class="note-icon">i</span><span>Use <code>Authorization: Bearer &lt;token&gt;</code>. GradleMCP does not implement OAuth discovery. Do not use an SSE endpoint or put the token in a URL.</span></div></section>
+            <section class="panel rest-panel"><div class="panel-heading"><div><p class="eyebrow">CUSTOM INTEGRATIONS</p><h2>REST quick start</h2></div><button class="copy-button" id="copyCurl">Copy cURL</button></div><p class="muted">Test an authenticated connection before submitting a build.</p><pre class="code-snippet" id="curlSnippet"></pre><div class="rest-foot"><span><span class="live-dot"></span> API authentication required</span><span>ZIP upload · async builds · bounded logs</span></div></section>
+          </div>
+        </section>
+      </main>
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    </div>
+  </div>
+  <script src="/ui/assets/app.js" defer></script>
+</body>
+</html>

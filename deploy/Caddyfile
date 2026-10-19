@@ -1,7 +1,11 @@
-# Replace with your DNS name; Caddy provisions and renews TLS certificates.
-builds.example.org {
+{$GRADLEMCP_DOMAIN} {
+    encode zstd gzip
+
     request_body {
         max_size 24MB
     }
-    reverse_proxy 127.0.0.1:8000
+
+    # Preserve Host and Authorization. GradleMCP checks its configured public_url
+    # and the MCP Host header; never publish the Docker API or controller port 8000.
+    reverse_proxy gradlemcp:8000
 }

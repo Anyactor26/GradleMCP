@@ -1,6 +1,8 @@
 .git
 .venv
 data
+.env
+.gradlemcp.env
 *.local*
 gradlemcp.json
 __pycache__

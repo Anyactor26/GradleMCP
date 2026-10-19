@@ -2,14 +2,16 @@ import asyncio
 import collections
 import time
 from contextlib import asynccontextmanager
-from urllib.parse import urlparse
+from pathlib import Path
+from urllib.parse import urlparse, urlsplit
 
 from fastapi import Depends, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
+from starlette.staticfiles import StaticFiles
 
 from .config import load_settings
 from .db import Database, require
@@ -31,6 +33,37 @@ class PublishRequest(BaseModel):
     idempotency_key: str = Field(min_length=1, max_length=128)
 
 
+def _origin_parts(value, scheme_hint=None):
+    try:
+        parsed = urlsplit(value if scheme_hint is None else f"{scheme_hint}://{value}")
+        scheme = (parsed.scheme or scheme_hint or "").lower()
+        if (
+            scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
+            return None
+        port = parsed.port or (443 if scheme == "https" else 80)
+        return scheme, parsed.hostname.rstrip(".").lower(), port
+    except ValueError:
+        return None
+
+
+def _origin_allowed(origin, host_header, public_url):
+    expected = _origin_parts(public_url) if public_url else None
+    if expected:
+        return _origin_parts(origin) == expected
+    origin_parts = _origin_parts(origin)
+    if not origin_parts or not host_header:
+        return False
+    host_parts = _origin_parts(host_header.decode(errors="replace"), origin_parts[0])
+    return host_parts == origin_parts
+
+
 class SecurityMiddleware:
     def __init__(self, app, service):
         self.app, self.service = app, service
@@ -40,7 +73,8 @@ class SecurityMiddleware:
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         headers = dict(scope["headers"])
-        if scope["path"] in ("/health", "/ready"):
+        path = scope["path"]
+        if path in ("/health", "/ready", "/ui") or path.startswith("/ui/"):
             return await self.app(scope, receive, send)
         try:
             auth = headers.get(b"authorization", b"").decode(errors="replace")
@@ -49,9 +83,15 @@ class SecurityMiddleware:
             token = auth[7:]
             client = await run_in_threadpool(self.service.db.authenticate, token)
             origin = headers.get(b"origin")
-            if origin and origin.decode() != self.service.config.public_url:
+            if origin and not _origin_allowed(
+                origin.decode(errors="replace"),
+                headers.get(b"host"),
+                self.service.config.public_url,
+            ):
                 raise ServiceError(
-                    "origin_rejected", "Origin is not the configured public URL", 403
+                    "origin_rejected",
+                    "Origin must match the configured public URL or this same origin",
+                    403,
                 )
             now = time.monotonic()
             window = self.windows[client.id]
@@ -104,9 +144,15 @@ def create_app(config=None, *, start_scheduler=True, worker=None):
     worker = worker or DockerWorker(config)
     scheduler = Scheduler(service, worker)
     mcp, publish = create_mcp(service)
-    allowed_hosts = [f"{config.host}:*", "localhost:*", "127.0.0.1:*"]
+    allowed_hosts = ["localhost:*", "127.0.0.1:*", "[::1]:*", *config.mcp_allowed_hosts]
+    if config.host not in {"0.0.0.0", "::", ""}:
+        configured_host = f"[{config.host}]:*" if ":" in config.host else f"{config.host}:*"
+        allowed_hosts.append(configured_host)
     if config.public_url:
-        allowed_hosts.append(urlparse(config.public_url).netloc)
+        public_host = urlparse(config.public_url).hostname
+        if public_host:
+            allowed_hosts.append(f"[{public_host}]:*" if ":" in public_host else f"{public_host}:*")
+    allowed_hosts = list(dict.fromkeys(allowed_hosts))
     remote = mcp.streamable_http_app(
         streamable_http_path="/",
         stateless_http=True,
@@ -114,7 +160,9 @@ def create_app(config=None, *, start_scheduler=True, worker=None):
         max_request_body_size=config.upload_mb * 1024**2 * 4 // 3 + 65536,
         transport_security=TransportSecuritySettings(
             allowed_hosts=allowed_hosts,
-            allowed_origins=[config.public_url] if config.public_url else [],
+            allowed_origins=[config.public_url]
+            if config.public_url
+            else config.mcp_allowed_origins,
         ),
     )
 
@@ -288,6 +336,35 @@ def create_app(config=None, *, start_scheduler=True, worker=None):
                 for key in ("queued", "active", "available_workers", "disk_free_bytes")
             )
             + "\n"
+        )
+
+    if config.ui_enabled:
+        web_root = Path(__file__).with_name("web")
+        if not (web_root / "index.html").is_file():
+            raise RuntimeError("Optional web UI assets are missing from this installation")
+
+        @app.get("/ui", include_in_schema=False)
+        def ui_redirect():
+            return RedirectResponse("/ui/", status_code=307)
+
+        @app.get("/ui/", include_in_schema=False)
+        def ui_index():
+            return FileResponse(
+                web_root / "index.html",
+                media_type="text/html",
+                headers={
+                    "Cache-Control": "no-store",
+                    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+                    "Referrer-Policy": "no-referrer",
+                    "X-Content-Type-Options": "nosniff",
+                    "X-Frame-Options": "DENY",
+                },
+            )
+
+        app.mount(
+            "/ui/assets",
+            StaticFiles(directory=web_root / "assets", check_dir=True),
+            name="ui-assets",
         )
 
     # Actual routes supply schemas; declare shared bearer security for clients/code generators.
