@@ -31,11 +31,12 @@ PostgreSQL service, external tunnel account or publication credentials were avai
 | Local documentation links | Checked; all referenced repository documentation exists |
 
 Shell syntax checks pass for `install.sh`, `gmc` and `scripts/install-docker.sh`.
-Regression tests cover the optional UI (disabled by default, static assets, authentication
-and same-origin enforcement), explicit MCP Host/Origin allowlists, agent endpoint
-metadata, and the management commands that toggle UI or public bindings. Installer
-fixtures cover automatic prerequisites, sudo/no-relogin operation, read-only and
-no-system-changes modes, daemon startup, refused sudo, supported OS variants, rejected
+Regression tests cover the dashboard (served by default with explicit opt-out, static
+assets, authentication and same-origin enforcement), explicit MCP Host/Origin
+allowlists, agent endpoint metadata, and the management commands that toggle UI or
+public bindings. Installer fixtures cover automatic prerequisites, sudo/no-relogin
+operation, read-only and no-system-changes modes, daemon startup, refused sudo,
+supported OS variants, rejected
 signing keys, failed downloads, runtime conflicts, unsupported hosts and private files.
 The bootstrap tests use a staged filesystem and fake OS/package/network tools:
 **they do not execute real APT, sudo, Docker installation or a fresh VM**.

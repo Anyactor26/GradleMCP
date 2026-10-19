@@ -58,7 +58,8 @@ running with administrative access.
   Reveal it deliberately with `./gmc token`; it is never printed by installation.
 - `./gmc start`, `stop`, `restart`, `status`, `logs`, `doctor` and `endpoint` manage the service.
 - `./gmc agent create NAME read,build` creates a separate one-time token for an AI agent.
-- `./gmc ui on` enables the optional dashboard at `/ui/`; `./gmc ui off` disables it.
+- The operator dashboard is served at `/ui/` by default; `./gmc ui off` disables it and
+  `./gmc ui on` re-enables it.
 - `./install.sh --check` is read-only; `--no-system-changes` requires existing Docker.
 - Config, data and credentials survive stop/restart/reinstall; no silent token rotation.
 - No world-writable sockets, automatic Docker-group grants, or downloaded root shell scripts.
@@ -93,21 +94,22 @@ See [installation](docs/INSTALLATION.md) for supported platforms and recovery, a
 The installer is covered by controlled tests; fresh-VM package bootstrap still needs
 verification on a real supported host.
 
-## Operator landing page and optional web UI
+## Operator landing page and web UI
 
 Opening the controller root (`http://<VPS-IP>:8000/`) always returns a public landing
 page — HTML in a browser, JSON for `curl`/agents — confirming the controller is running
-and linking `/health`, `/openapi.json`, `/mcp/` and the dashboard (when enabled). It
-needs no token, so the bare address can never look like an empty, unbound port. All
-build and control routes still require Bearer authentication.
+and linking `/health`, `/openapi.json`, `/mcp/` and the dashboard. It needs no token,
+so the bare address can never look like an empty, unbound port. All build and control
+routes still require Bearer authentication.
 
-The dashboard itself is disabled by default. On an installed Docker deployment, enable
-it with `./gmc ui on`, which prints the exact URL to open — the detected VPS address for
-a default `0.0.0.0` publish, the pinned host for `./gmc expose direct HOST`, or the
-HTTPS domain for `./gmc expose https DOMAIN`. Use `./gmc ui off` to remove the route.
-It provides live queue and worker monitoring, recent build history, manual ZIP
-upload/compile, job cancellation, logs, diagnostics, artifact downloads, and copy-ready
-REST/MCP client details.
+The dashboard at `/ui/` is **enabled by default** — it is a static, token-gated shell
+that exposes no data without an API credential. `./gmc ui status` prints the exact URL
+to open (the detected VPS address for a default `0.0.0.0` publish, the pinned host for
+`./gmc expose direct HOST`, or the HTTPS domain for `./gmc expose https DOMAIN`);
+`./gmc ui off` removes the route entirely and `./gmc ui on` restores it. It provides
+live queue and worker monitoring, recent build history, manual ZIP upload/compile, job
+cancellation, logs, diagnostics, artifact downloads, and copy-ready REST/MCP client
+details.
 
 The UI is served by the controller—no Node.js or extra web server is required. It asks
 for a scoped API token, keeps it in page memory only, and sends it in authenticated API

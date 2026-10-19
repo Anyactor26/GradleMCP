@@ -166,14 +166,14 @@ HOST_IP=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^([0-9]{1,3}\.){3}[0-
 BASE="http://127.0.0.1:8000"
 [ -z "$HOST_IP" ] || BASE="http://$HOST_IP:8000"
 printf '\nGradleMCP is ready at %s (port 8000 is published on all interfaces)\n' "$BASE"
-printf 'Open %s/ in a browser for the service landing page (status, links, dashboard enablement).\n' "$BASE"
+printf 'Open %s/ in a browser for the service landing page (status, links, dashboard link).\n' "$BASE"
+printf 'Dashboard ready at %s/ui/ (enabled by default; ./gmc ui off removes the route).\n' "$BASE"
 printf 'Private API token saved to %s/%s (0600); reveal it only when needed with ./gmc token.\n' "$ROOT" "$TOKEN"
 printf 'REST API: %s/api/v1\n' "$BASE"
 printf 'Remote MCP: %s/mcp/ (Streamable HTTP; Authorization: Bearer <token>).\n' "$BASE"
 printf 'If the VPS address is still unreachable, open TCP 8000 in the VPS firewall and provider security group, or run ./gmc doctor.\n'
 printf 'Commands: ./gmc start | stop | restart | status | logs | doctor | token\n'
 printf 'Docker management uses docker compose (or sudo docker compose when required); ./gmc detects access automatically.\n'
-printf 'Optional dashboard: ./gmc ui on (then open %s/ui/).\n' "$BASE"
 printf 'Secure public access: ./gmc expose https <your-domain> (DNS + inbound 80/443 required).\n'
 printf 'Re-run ./install.sh safely; config, data and existing credentials are preserved.\n'
 printf 'External reachability depends on DNS and VPS/cloud firewall rules; see docs/DEPLOYMENT.md.\n'

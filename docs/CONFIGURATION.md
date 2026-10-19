@@ -37,7 +37,7 @@ Example JSON (merge into generated config):
 | `public_url`, `exposure` | null, private; `public_url` must be the exact HTTPS origin; modes private/direct/proxy/cloudflare/ngrok/custom |
 | `mcp_allowed_hosts` | Empty; exact hostname/IP entries with optional port (`example.org:*`), used by MCP Host validation for a direct/custom endpoint |
 | `mcp_allowed_origins` | Empty; exact HTTP(S) origins (optionally wildcard port, such as `http://192.0.2.4:*`) for direct/private MCP browser clients; public HTTPS uses `public_url` |
-| `ui_enabled` | false; enables the optional operator dashboard at `/ui/`; Docker users can toggle it with `./gmc ui on|off` |
+| `ui_enabled` | true; serves the operator dashboard at `/ui/` (static token-gated shell, no data without a credential); set false or use `./gmc ui off` to remove the route |
 | `tunnel_status_url` | null; operator-owned local ngrok tunnel API, e.g. `http://ngrok:4040/api/tunnels` |
 | `publish_tasks`, `publish_toolchain`, `publish_secrets_file` | Empty/null; allowlisted tasks, dedicated profile, protected Docker env-file |
 | `log_level` | INFO; DEBUG/INFO/WARNING/ERROR |

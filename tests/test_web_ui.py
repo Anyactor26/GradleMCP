@@ -6,10 +6,22 @@ from gradlemcp.api import create_app
 from gradlemcp.config import Settings
 
 
-def test_dashboard_is_off_by_default(config):
+def test_dashboard_is_served_by_default(config):
+    # A fresh deployment must answer /ui/ directly; operators should not need a
+    # separate enablement step to reach the interface.
     app = create_app(config, start_scheduler=False)
     with TestClient(app) as http:
+        page = http.get("/ui/")
+        assert page.status_code == 200
+        assert "Compile a project" in page.text
+        assert http.get("/ui/assets/app.js").status_code == 200
+
+    # Explicit operator opt-out still removes the route entirely.
+    config.ui_enabled = False
+    disabled = create_app(config, start_scheduler=False)
+    with TestClient(disabled) as http:
         assert http.get("/ui/").status_code == 404
+        assert http.get("/ui").status_code == 404
 
 
 def test_root_landing_is_public_without_a_token(config):
@@ -24,23 +36,39 @@ def test_root_landing_is_public_without_a_token(config):
         assert "/health" in page.text and "/mcp/" in page.text
         assert "Content-Security-Policy" in page.headers
         assert page.headers["X-Frame-Options"] == "DENY"
-        # Dashboard is off by default: the landing page says how to turn it on
-        # instead of linking to a route that would 404.
-        assert 'href="/ui/"' not in page.text
-        assert "./gmc ui on" in page.text
+        # Dashboard is on by default, so the landing page links straight to it.
+        assert 'href="/ui/"' in page.text
 
         api = http.get("/", headers={"Accept": "application/json"})
         assert api.status_code == 200
         body = api.json()
         assert body["status"] == "ok"
-        assert body["ui_enabled"] is False
-        assert body["paths"]["ui"] is None
+        assert body["ui_enabled"] is True
+        assert body["paths"]["ui"] == "/ui/"
         assert body["paths"]["mcp"] == "/mcp/"
 
         # Generic clients (curl, agents) send */* and receive structured JSON.
         default = http.get("/")
         assert default.status_code == 200
         assert "application/json" in default.headers["content-type"]
+
+
+def test_root_landing_explains_explicitly_disabled_dashboard(tmp_path):
+    config = Settings(
+        data_dir=tmp_path,
+        database_url=f"sqlite:///{tmp_path}/disabled.db",
+        storage_reserve_mb=0,
+        ui_enabled=False,
+    )
+    app = create_app(config, start_scheduler=False)
+    with TestClient(app) as http:
+        page = http.get("/", headers={"Accept": "text/html"})
+        assert page.status_code == 200
+        assert 'href="/ui/"' not in page.text
+        assert "./gmc ui on" in page.text
+        body = http.get("/", headers={"Accept": "application/json"}).json()
+        assert body["ui_enabled"] is False
+        assert body["paths"]["ui"] is None
 
 
 def test_root_landing_links_dashboard_when_enabled(tmp_path):

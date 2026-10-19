@@ -18,6 +18,23 @@ public plaintext HTTP. To make the controller loopback-only, run `./gmc expose o
 (or set `GRADLEMCP_BIND_ADDRESS=127.0.0.1`). `./gmc expose direct <VPS-IP>` records the
 public host for MCP Host validation while keeping the all-interface binding.
 
+### Public versus private IP (1:1 NAT)
+
+Many cloud VPSs present a public IP (for example `130.210.14.222`) that is mapped 1:1 to
+a private address attached to the machine (for example `10.0.0.112`). The host itself
+only reports the private address in `hostname -I`; the public IP is configured in the
+cloud platform's NAT/security-group layer. Because GradleMCP binds `0.0.0.0`, both
+addresses reach the same listener — no application change selects between them. The
+platform side must (1) assign the 1:1 NAT mapping to this instance and (2) allow inbound
+TCP 8000 in the security group, in addition to the OS firewall. Verify from a *different*
+network (not from the VPS itself): `curl -i http://<public-ip>:8000/health` and
+`curl -i http://<public-ip>:8000/ui/` should both return HTTP 200. `./gmc doctor` lists
+the locally reported addresses and prints this exact probe checklist.
+
+The operator dashboard at `/ui/` is enabled by default (a static token-gated shell; no
+data is exposed without an API credential). Set `ui_enabled=false` or run
+`./gmc ui off` to remove the route.
+
 For a public endpoint, terminate TLS at a reverse proxy. The one-command Caddy setup is
 `./gmc expose https builds.example.org` (see section B). Point DNS at the server and
 allow inbound ports 80/443 in both the OS firewall and VPS/cloud security group. Set

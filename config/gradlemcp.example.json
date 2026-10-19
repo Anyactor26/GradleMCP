@@ -39,7 +39,7 @@
   "public_url": null,
   "mcp_allowed_hosts": [],
   "mcp_allowed_origins": [],
-  "ui_enabled": false,
+  "ui_enabled": true,
   "exposure": "private",
   "tunnel_status_url": null,
   "publish_tasks": [],

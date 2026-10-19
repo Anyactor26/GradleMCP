@@ -195,3 +195,44 @@ def test_doctor_confirms_all_interface_publish_and_firewall_hint(tmp_path):
     assert "0.0.0.0:8000" in result.stdout
     assert "loopback-only" not in result.stdout
     assert "provider firewalls" in result.stdout
+
+
+def test_ui_status_reports_enabled_without_explicit_opt_in(tmp_path):
+    control = control_fixture(tmp_path)
+    result = run_control(control, "ui", "status")
+    assert result.returncode == 0, result.stderr
+    assert "Dashboard: enabled at" in result.stdout
+    assert "http://127.0.0.1:8000/ui/" in result.stdout
+
+
+def test_ui_status_reports_disabled_after_opt_out(tmp_path):
+    control = control_fixture(tmp_path)
+    root, _, _ = control
+    with (root / ".gradlemcp.env").open("a") as env:
+        env.write("GRADLEMCP_UI_ENABLED=false\n")
+    result = run_control(control, "ui", "status")
+    assert result.returncode == 0, result.stderr
+    assert "Dashboard: disabled" in result.stdout
+
+
+def test_doctor_reports_dashboard_state_host_addresses_and_nat_guidance(tmp_path):
+    control = control_fixture(tmp_path)
+    result = run_control(control, "doctor", extra_env={"GMCP_TEST_HOSTNAME": "10.0.0.112"})
+    assert result.returncode == 0, result.stderr
+    assert "Dashboard (/ui/):" in result.stdout
+    assert "Configuration: enabled (default" in result.stdout
+    assert "10.0.0.112" in result.stdout
+    # NAT guidance must name the public-IP/private-IP split and an external probe.
+    assert "1:1 NAT" in result.stdout
+    assert "http://<public-ip>:8000/ui/" in result.stdout
+
+
+def test_doctor_reports_disabled_dashboard_configuration(tmp_path):
+    control = control_fixture(tmp_path)
+    root, _, _ = control
+    with (root / ".gradlemcp.env").open("a") as env:
+        env.write("GRADLEMCP_UI_ENABLED=false\n")
+    result = run_control(control, "doctor")
+    assert result.returncode == 0, result.stderr
+    assert "Configuration: disabled" in result.stdout
+    assert "./gmc ui on" in result.stdout
