@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from gradlemcp.api import create_app
@@ -8,6 +10,56 @@ def test_dashboard_is_off_by_default(config):
     app = create_app(config, start_scheduler=False)
     with TestClient(app) as http:
         assert http.get("/ui/").status_code == 404
+
+
+def test_root_landing_is_public_without_a_token(config):
+    # The bare VPS address must prove the controller is actually serving instead of
+    # returning a 401/404 that makes the port look bound to nothing.
+    app = create_app(config, start_scheduler=False)
+    with TestClient(app) as http:
+        page = http.get("/", headers={"Accept": "text/html"})
+        assert page.status_code == 200
+        assert "text/html" in page.headers["content-type"]
+        assert "GradleMCP controller" in page.text
+        assert "/health" in page.text and "/mcp/" in page.text
+        assert "Content-Security-Policy" in page.headers
+        assert page.headers["X-Frame-Options"] == "DENY"
+        # Dashboard is off by default: the landing page says how to turn it on
+        # instead of linking to a route that would 404.
+        assert 'href="/ui/"' not in page.text
+        assert "./gmc ui on" in page.text
+
+        api = http.get("/", headers={"Accept": "application/json"})
+        assert api.status_code == 200
+        body = api.json()
+        assert body["status"] == "ok"
+        assert body["ui_enabled"] is False
+        assert body["paths"]["ui"] is None
+        assert body["paths"]["mcp"] == "/mcp/"
+
+        # Generic clients (curl, agents) send */* and receive structured JSON.
+        default = http.get("/")
+        assert default.status_code == 200
+        assert "application/json" in default.headers["content-type"]
+
+
+def test_root_landing_links_dashboard_when_enabled(tmp_path):
+    config = Settings(
+        data_dir=tmp_path,
+        database_url=f"sqlite:///{tmp_path}/landing.db",
+        storage_reserve_mb=0,
+        ui_enabled=True,
+    )
+    app = create_app(config, start_scheduler=False)
+    with TestClient(app) as http:
+        page = http.get("/", headers={"Accept": "text/html"})
+        assert page.status_code == 200
+        assert 'href="/ui/"' in page.text
+        body = http.get("/", headers={"Accept": "application/json"}).json()
+        assert body["ui_enabled"] is True
+        assert body["paths"]["ui"] == "/ui/"
+        # The landing page stays public; protected routes still demand a token.
+        assert http.get("/api/v1/capabilities").status_code == 401
 
 
 def test_dashboard_is_optional_and_authenticated_ui_api_stays_protected(tmp_path):
@@ -38,6 +90,41 @@ def test_dashboard_is_optional_and_authenticated_ui_api_stays_protected(tmp_path
             ).status_code
             == 403
         )
+
+
+def test_dashboard_ships_theme_toggle_and_self_contained_assets():
+    web_root = Path(__file__).resolve().parents[1] / "src" / "gradlemcp" / "web"
+    index = (web_root / "index.html").read_text()
+    script = (web_root / "assets" / "app.js").read_text()
+    styles = (web_root / "assets" / "styles.css").read_text()
+
+    # Manual light/dark override plus OS-level dark mode support.
+    assert 'id="themeToggle"' in index
+    assert "icon-moon" in index and "icon-sun" in index
+    assert "initTheme" in script and "gradlemcp-theme" in script
+    assert "prefers-color-scheme: dark" in styles
+    assert '[data-theme="dark"]' in styles
+
+    # Self-hosted/CSP-safe: no external font/stylesheet references (the SVG
+    # namespace URL inside the data-URI favicon is an identifier, not a fetch).
+    assert 'rel="icon" href="data:image/svg+xml' in index
+    assert 'href="http' not in index and 'src="http' not in index
+    assert "fonts.googleapis" not in styles and "@import" not in styles
+    assert "url(http" not in styles
+    # Every interactive status class the JavaScript generates still has styling.
+    for class_name in (
+        "badge-success",
+        "badge-danger",
+        "badge-running",
+        "badge-queued",
+        "badge-neutral",
+        "indicator-error",
+        "indicator-busy",
+        "sidebar-open",
+        "has-file",
+        "dragging",
+    ):
+        assert f".{class_name}" in styles
 
 
 def test_agent_discovery_documents_exact_protocol_paths(http):

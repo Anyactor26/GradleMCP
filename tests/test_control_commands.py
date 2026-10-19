@@ -23,9 +23,18 @@ def control_fixture(tmp_path):
         "args=sys.argv[1:]\n"
         "if args==['info']: sys.exit(0)\n"
         "with open(os.environ['DOCKER_LOG'],'a') as out: out.write(json.dumps(args)+'\\n')\n"
-        "if args[:2]==['compose','port']: print('0.0.0.0:8000')\n"
+        "if args[:2]==['compose','port']: print(os.environ.get('GMCP_TEST_PORT', '0.0.0.0:8000'))\n"
     )
     docker.chmod(0o755)
+    # Deterministic stand-in for `hostname -I`; defaults to no routable address so
+    # loopback fallback behaviour stays testable.
+    hostname = bin_dir / "hostname"
+    hostname.write_text(
+        f"#!{sys.executable}\n"
+        "import os, sys\n"
+        "sys.exit(print(os.environ.get('GMCP_TEST_HOSTNAME', '')) or 0)\n"
+    )
+    hostname.chmod(0o755)
     env = os.environ | {
         "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"],
         "DOCKER_LOG": str(log),
@@ -33,12 +42,12 @@ def control_fixture(tmp_path):
     return root, env, log
 
 
-def run_control(control, *args):
+def run_control(control, *args, extra_env=None):
     root, env, _ = control
     return subprocess.run(
         ["sh", str(root / "gmc"), *args],
         cwd=root,
-        env=env,
+        env=env | (extra_env or {}),
         capture_output=True,
         text=True,
         timeout=10,
@@ -111,3 +120,78 @@ def test_ui_endpoint_uses_direct_public_host_when_exposed(tmp_path):
     result = run_control(control, "ui", "on")
     assert result.returncode == 0, result.stderr
     assert "http://198.51.100.27:8000/ui/" in result.stdout
+
+
+def test_ui_url_uses_detected_vps_address_on_default_publish(tmp_path):
+    # Default install publishes 0.0.0.0:8000; the printed UI URL must use the
+    # host's routable address instead of an unopenable 127.0.0.1 URL.
+    control = control_fixture(tmp_path)
+    result = run_control(control, "ui", "on", extra_env={"GMCP_TEST_HOSTNAME": "198.51.100.27"})
+    assert result.returncode == 0, result.stderr
+    assert "http://198.51.100.27:8000/ui/" in result.stdout
+    assert "127.0.0.1:8000/ui/" not in result.stdout
+
+
+def test_primary_host_skips_link_local_addresses(tmp_path):
+    control = control_fixture(tmp_path)
+    result = run_control(
+        control,
+        "ui",
+        "on",
+        extra_env={"GMCP_TEST_HOSTNAME": "169.254.10.10 198.51.100.27"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert "http://198.51.100.27:8000/ui/" in result.stdout
+
+
+def test_primary_host_brackets_ipv6_when_no_ipv4_exists(tmp_path):
+    control = control_fixture(tmp_path)
+    result = run_control(control, "ui", "on", extra_env={"GMCP_TEST_HOSTNAME": "2001:db8::10"})
+    assert result.returncode == 0, result.stderr
+    assert "http://[2001:db8::10]:8000/ui/" in result.stdout
+
+
+def test_primary_host_falls_back_to_loopback_without_routable_address(tmp_path):
+    control = control_fixture(tmp_path)
+    result = run_control(control, "ui", "on", extra_env={"GMCP_TEST_HOSTNAME": "169.254.10.10"})
+    assert result.returncode == 0, result.stderr
+    assert "http://127.0.0.1:8000/ui/" in result.stdout
+
+
+def test_expose_off_reports_loopback_url_despite_detected_address(tmp_path):
+    control = control_fixture(tmp_path)
+    assert (
+        run_control(
+            control, "expose", "off", extra_env={"GMCP_TEST_HOSTNAME": "198.51.100.27"}
+        ).returncode
+        == 0
+    )
+    result = run_control(control, "ui", "on", extra_env={"GMCP_TEST_HOSTNAME": "198.51.100.27"})
+    assert result.returncode == 0, result.stderr
+    assert "http://127.0.0.1:8000/ui/" in result.stdout
+    assert "198.51.100.27" not in result.stdout
+
+
+def test_endpoint_output_lists_public_landing_page(tmp_path):
+    control = control_fixture(tmp_path)
+    result = run_control(control, "endpoint", extra_env={"GMCP_TEST_HOSTNAME": "198.51.100.27"})
+    assert result.returncode == 0, result.stderr
+    assert "Landing:    http://198.51.100.27:8000/" in result.stdout
+    assert "Dashboard:  http://198.51.100.27:8000/ui/" in result.stdout
+
+
+def test_doctor_flags_loopback_only_published_port(tmp_path):
+    control = control_fixture(tmp_path)
+    result = run_control(control, "doctor", extra_env={"GMCP_TEST_PORT": "127.0.0.1:8000"})
+    assert result.returncode == 0, result.stderr
+    assert "127.0.0.1:8000" in result.stdout
+    assert "WARNING: loopback-only binding" in result.stdout
+
+
+def test_doctor_confirms_all_interface_publish_and_firewall_hint(tmp_path):
+    control = control_fixture(tmp_path)
+    result = run_control(control, "doctor")
+    assert result.returncode == 0, result.stderr
+    assert "0.0.0.0:8000" in result.stdout
+    assert "loopback-only" not in result.stdout
+    assert "provider firewalls" in result.stdout

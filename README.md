@@ -93,19 +93,34 @@ See [installation](docs/INSTALLATION.md) for supported platforms and recovery, a
 The installer is covered by controlled tests; fresh-VM package bootstrap still needs
 verification on a real supported host.
 
-## Optional operator web UI
+## Operator landing page and optional web UI
 
-The dashboard is disabled by default. On an installed Docker deployment, enable it with
-`./gmc ui on` and open `http://127.0.0.1:8000/ui/` locally (or the configured HTTPS
-URL plus `/ui/`). Use `./gmc ui off` to remove the route. It provides live queue and
-worker monitoring, recent build history, manual ZIP upload/compile, job cancellation,
-logs, diagnostics, artifact downloads, and copy-ready REST/MCP client details.
+Opening the controller root (`http://<VPS-IP>:8000/`) always returns a public landing
+page — HTML in a browser, JSON for `curl`/agents — confirming the controller is running
+and linking `/health`, `/openapi.json`, `/mcp/` and the dashboard (when enabled). It
+needs no token, so the bare address can never look like an empty, unbound port. All
+build and control routes still require Bearer authentication.
+
+The dashboard itself is disabled by default. On an installed Docker deployment, enable
+it with `./gmc ui on`, which prints the exact URL to open — the detected VPS address for
+a default `0.0.0.0` publish, the pinned host for `./gmc expose direct HOST`, or the
+HTTPS domain for `./gmc expose https DOMAIN`. Use `./gmc ui off` to remove the route.
+It provides live queue and worker monitoring, recent build history, manual ZIP
+upload/compile, job cancellation, logs, diagnostics, artifact downloads, and copy-ready
+REST/MCP client details.
 
 The UI is served by the controller—no Node.js or extra web server is required. It asks
 for a scoped API token, keeps it in page memory only, and sends it in authenticated API
 requests; it does not save tokens in localStorage or cookies. Use HTTPS for remote
 browsers. The dashboard is separate from the API/MCP protocols and is not required by
 AI agents.
+
+The interface is fully self-contained: system font stacks and an inline SVG favicon
+only, with no external font/CDN requests, so it works on air-gapped VPS hosts and
+satisfies the strict Content-Security-Policy. A light and a dark theme are included;
+the theme follows the OS preference automatically and can be switched from the topbar
+(only the theme choice is stored locally, never credentials). The layout is responsive
+down to phone widths, with a slide-in navigation on small screens.
 
 ## Manual / development installation
 

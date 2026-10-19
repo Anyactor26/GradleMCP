@@ -17,6 +17,54 @@
   const terminalStates = new Set(["succeeded", "failed", "cancelled", "timed_out", "resource_limit_exceeded"]);
   const activeStates = new Set(["preparing", "running", "cancelling"]);
 
+  // Theme preference is the only thing persisted locally; API tokens stay in memory.
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    const moon = $(".icon-moon");
+    const sun = $(".icon-sun");
+    const toggle = $("#themeToggle");
+    if (moon) moon.hidden = theme === "dark";
+    if (sun) sun.hidden = theme !== "dark";
+    if (toggle) {
+      toggle.setAttribute(
+        "aria-label",
+        theme === "dark" ? "Switch to light theme" : "Switch to dark theme"
+      );
+      toggle.setAttribute(
+        "title",
+        theme === "dark" ? "Switch to light theme" : "Switch to dark theme"
+      );
+    }
+  }
+
+  function initTheme() {
+    let theme = null;
+    try {
+      theme = localStorage.getItem("gradlemcp-theme");
+    } catch (_) {
+      theme = null;
+    }
+    if (theme !== "light" && theme !== "dark") {
+      theme =
+        window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light";
+    }
+    applyTheme(theme);
+    const toggle = $("#themeToggle");
+    if (toggle) {
+      toggle.addEventListener("click", () => {
+        const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+        applyTheme(next);
+        try {
+          localStorage.setItem("gradlemcp-theme", next);
+        } catch (_) {
+          /* private mode or storage disabled; preference applies for this session */
+        }
+      });
+    }
+  }
+
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, (character) => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -516,6 +564,7 @@
     });
   }
 
+  initTheme();
   setupEvents();
   $("#tokenInput").focus();
 })();

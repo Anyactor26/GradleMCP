@@ -29,6 +29,14 @@ Set `public_url=https://builds.example.org` and `exposure=direct`/`proxy` as app
 Do not add trailing paths/slashes to the public base URL. GradleMCP never attempts to
 infer your public IP or punch through NAT automatically.
 
+The root path `/` is a public, token-free landing page (HTML for browsers, JSON for
+`curl` and agents) that confirms the controller is serving and lists the health, API,
+MCP, OpenAPI and dashboard paths. Use it as the first reachability check after opening
+the firewall. `./gmc doctor` prints the actual host-side Docker binding (for example
+`0.0.0.0:8000` versus `127.0.0.1:8000`) and warns when a loopback-only publish makes the
+VPS address unreachable; `./gmc endpoint` prints the REST, MCP, landing and dashboard
+URLs derived from the current bind address, detected host IP or configured domain.
+
 ## B. Reverse proxy
 
 ### Automatic Caddy profile
