@@ -137,6 +137,33 @@ class SecurityMiddleware:
             await response(scope, receive, send)
 
 
+def _transport_security(config):
+    """Host/Origin policy for the remote MCP transport.
+
+    DNS-rebinding protection is only meaningful for a host-specific listener. When the
+    controller listens on every interface, any address already reaches the port, so a
+    Host allowlist would reject legitimate `<VPS-IP>:8000` requests instead of protecting
+    anything. It stays enabled for loopback/host-specific binds and whenever the operator
+    configures an explicit Host allowlist or public URL.
+    """
+    wildcard_bind = config.host in {"0.0.0.0", "::", ""}
+    allowed_hosts = ["localhost:*", "127.0.0.1:*", "[::1]:*"]
+    if not wildcard_bind:
+        allowed_hosts.append(f"[{config.host}]:*" if ":" in config.host else f"{config.host}:*")
+    if config.public_url:
+        public_host = urlparse(config.public_url).hostname
+        if public_host:
+            allowed_hosts.append(f"[{public_host}]:*" if ":" in public_host else f"{public_host}:*")
+    allowed_hosts.extend(config.mcp_allowed_hosts)
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=(
+            not wildcard_bind or bool(config.mcp_allowed_hosts) or bool(config.public_url)
+        ),
+        allowed_hosts=list(dict.fromkeys(allowed_hosts)),
+        allowed_origins=[config.public_url] if config.public_url else config.mcp_allowed_origins,
+    )
+
+
 def create_app(config=None, *, start_scheduler=True, worker=None):
     config = config or load_settings()
     db = Database(config)
@@ -144,26 +171,12 @@ def create_app(config=None, *, start_scheduler=True, worker=None):
     worker = worker or DockerWorker(config)
     scheduler = Scheduler(service, worker)
     mcp, publish = create_mcp(service)
-    allowed_hosts = ["localhost:*", "127.0.0.1:*", "[::1]:*", *config.mcp_allowed_hosts]
-    if config.host not in {"0.0.0.0", "::", ""}:
-        configured_host = f"[{config.host}]:*" if ":" in config.host else f"{config.host}:*"
-        allowed_hosts.append(configured_host)
-    if config.public_url:
-        public_host = urlparse(config.public_url).hostname
-        if public_host:
-            allowed_hosts.append(f"[{public_host}]:*" if ":" in public_host else f"{public_host}:*")
-    allowed_hosts = list(dict.fromkeys(allowed_hosts))
     remote = mcp.streamable_http_app(
         streamable_http_path="/",
         stateless_http=True,
         json_response=True,
         max_request_body_size=config.upload_mb * 1024**2 * 4 // 3 + 65536,
-        transport_security=TransportSecuritySettings(
-            allowed_hosts=allowed_hosts,
-            allowed_origins=[config.public_url]
-            if config.public_url
-            else config.mcp_allowed_origins,
-        ),
+        transport_security=_transport_security(config),
     )
 
     @asynccontextmanager

@@ -93,6 +93,10 @@ compose() { run_docker compose "$@"; }
 
 start_service() {
     require_install
+    # Compose defaults to publishing on all interfaces; record it so status/endpoint
+    # report the address clients can actually use (older installs lack this key).
+    [ -n "$(get_value .env GRADLEMCP_BIND_ADDRESS)" ] ||
+        set_value .env GRADLEMCP_BIND_ADDRESS set 0.0.0.0
     domain=$(get_value .env GRADLEMCP_DOMAIN)
     if [ -n "$domain" ]; then
         compose --profile tls up -d --wait --wait-timeout 120 gradlemcp caddy
@@ -110,6 +114,18 @@ stop_service() {
     compose stop -t 180 gradlemcp
 }
 
+primary_host() {
+    # First non-loopback IPv4 address of this host, when the OS reports one.
+    hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' | grep -v '^127\.' | head -n 1 || true
+}
+
+bind_is_public() {
+    case "$(get_value .env GRADLEMCP_BIND_ADDRESS)" in
+        127.*|localhost|::1|'[::1]') return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
 print_endpoint() {
     domain=$(get_value .env GRADLEMCP_DOMAIN)
     public_host=$(get_value .env GRADLEMCP_PUBLIC_HOST)
@@ -120,8 +136,14 @@ print_endpoint() {
         base="http://$public_host:8000"
         printf 'Direct URL: %s (plain HTTP; do not send production credentials over the public Internet)\n' "$base"
     else
-        base='http://127.0.0.1:8000'
-        printf 'Private URL: %s (localhost only)\n' "$base"
+        host=$(primary_host)
+        if bind_is_public && [ -n "$host" ]; then
+            base="http://$host:8000"
+            printf 'Direct URL: %s (published on all interfaces; plain HTTP)\n' "$base"
+        else
+            base='http://127.0.0.1:8000'
+            printf 'Private URL: %s (localhost only)\n' "$base"
+        fi
     fi
     printf 'REST API:   %s/api/v1\n' "$base"
     printf 'MCP:        %s/mcp/ (Streamable HTTP; Authorization: Bearer <token>)\n' "$base"

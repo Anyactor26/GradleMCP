@@ -35,7 +35,9 @@ has Docker administration capability; compromising it is host compromise.
   logs/artifacts exported, no automatic publication replay. All Gradle jobs can execute
   code; never inject credentials into a project you do not trust.
 - Minimal public health/readiness; capabilities, metrics, docs and all build data require
-  authentication. Origin checks and MCP SDK DNS-rebinding/Host defenses. No wildcard CORS.
+  authentication. Origin checks everywhere, plus MCP SDK DNS-rebinding/Host checks for
+  host-specific binds (an all-interface bind is already reachable by any address, so it
+  relies on bearer auth and REST Origin checks). No wildcard CORS.
 - Optional dashboard is disabled by default and serves only static login/UI assets without
   a token. API calls remain bearer-authenticated; the UI holds a user-entered token in
   page memory only (not localStorage/cookies) and clears it on logout/page reload.

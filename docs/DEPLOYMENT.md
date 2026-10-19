@@ -7,11 +7,13 @@ Use one scheduler/one Uvicorn worker; do not horizontally scale this release.
 
 ## A. Private network or VPS IP
 
-Compose publishes the controller as `127.0.0.1:8000:8000` by default. This is
-intentionally private: `http://<VPS-IP>:8000` will not answer from outside until the
-host binding is changed. `./gmc expose direct <VPS-IP>` can publish port 8000 on all
-interfaces, but that is plain HTTP and is suitable only for trusted private/VPN testing.
-Do not transmit real bearer tokens, source ZIPs or build output over public plaintext HTTP.
+Compose publishes the controller as `0.0.0.0:8000:8000` by default, so `http://<VPS-IP>:8000`
+answers once TCP 8000 is allowed in both the OS firewall and the VPS/cloud security group.
+This is plain HTTP and the API is bearer-authenticated, so treat direct exposure as trusted
+network/VPN only; do not transmit real bearer tokens, source ZIPs or build output over
+public plaintext HTTP. To make the controller loopback-only again, run `./gmc expose off`
+(or set `GRADLEMCP_BIND_ADDRESS=127.0.0.1`). `./gmc expose direct <VPS-IP>` records the
+public host for MCP Host validation while keeping the all-interface binding.
 
 For a public endpoint, terminate TLS at a reverse proxy. The one-command Caddy setup is
 `./gmc expose https builds.example.org` (see section B). Point DNS at the server and

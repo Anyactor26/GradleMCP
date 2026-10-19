@@ -81,16 +81,17 @@ the container CLI to explicitly rotate installer-agent; protect the new token ou
 Operator-customized config/storage paths may need corresponding Compose mounts.
 
 The controller's Python, Java worker runtime and Gradle toolchain live in containers;
-no host Python/Java/Gradle/uv install is needed for this path. Endpoints default to
-localhost:8000, `/api/v1` (REST), and `/mcp/` (authenticated Streamable HTTP). Use
+no host Python/Java/Gradle/uv install is needed for this path. Port 8000 is published on
+all interfaces by default, so endpoints are `http://<VPS-IP>:8000`, `/api/v1` (REST), and
+`/mcp/` (authenticated Streamable HTTP); allow TCP 8000 in the OS and provider firewalls
+(or use `./gmc expose off` to keep it loopback-only). Use
 `./gmc start|stop|restart|status|logs|doctor|token` rather than remembering Compose
 flags. Stop requests a graceful controller shutdown; durable data and credentials remain.
 
 For a public deployment with a DNS name, `./gmc expose https builds.example.org`
 configures the optional Caddy TLS proxy. Point DNS to the VPS and allow inbound TCP
-80/443 in both the OS and provider firewall. Use `./gmc expose direct <VPS-IP>` only
-for testing or a trusted private/VPN: it publishes plain HTTP on 8000 and must not carry
-real tokens across the public Internet. The application cannot open a cloud-provider
+80/443 in both the OS and provider firewall. Use plain HTTP on 8000 only for trusted
+private/VPN access or testing: it must not carry real tokens across the public Internet. The application cannot open a cloud-provider
 security group or prove external reachability. Run `./gmc doctor` for local status and
 check remote firewall/NAT/DNS from a separate network.
 

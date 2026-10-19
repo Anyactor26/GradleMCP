@@ -20,7 +20,7 @@ Example JSON (merge into generated config):
 | Field(s) | Meaning / default |
 |---|---|
 | `data_dir`, `database_url` | Durable private storage, SQLite `./data/gradlemcp.db`; alternatively `postgresql+psycopg://...` |
-| `host`, `port` | Native default `127.0.0.1:8000`; Docker controller binds `0.0.0.0` inside its container, while Compose publishes only `127.0.0.1:8000` by default |
+| `host`, `port` | Native default `127.0.0.1:8000`; Docker controller binds `0.0.0.0` inside its container, and Compose publishes `0.0.0.0:8000` on the host by default so the VPS address is reachable |
 | `max_workers`, `max_queue` | 1 active slot, 32 globally queued |
 | `per_client_active`, `per_client_queued` | 1, 8; retained upload quota is 4 × queued quota |
 | `memory_mb`, `total_memory_mb` | 2048 each; reservation validation enforces product of worker count and memory |
@@ -43,10 +43,13 @@ Example JSON (merge into generated config):
 | `log_level` | INFO; DEBUG/INFO/WARNING/ERROR |
 
 Compose installs write optional container overrides to `.gradlemcp.env` (0600),
-which is gitignored; Compose's `.env` selects only the host port binding. The safe
-binding is loopback-only. `./gmc expose https DOMAIN` configures Caddy, `public_url` and
-MCP Host validation; `./gmc expose direct HOST` binds `0.0.0.0:8000` for trusted
-private/VPN testing only. Host and provider firewall rules remain operator-owned.
+which is gitignored; Compose's `.env` selects only the host port binding. Installs set
+`GRADLEMCP_BIND_ADDRESS=0.0.0.0` so `<VPS-IP>:8000` answers; restrict access with the
+OS/provider firewall, or set `GRADLEMCP_BIND_ADDRESS=127.0.0.1` (`./gmc expose off`) for
+a loopback-only controller. `./gmc expose https DOMAIN` configures Caddy, `public_url`
+and MCP Host validation; `./gmc expose direct HOST` keeps the all-interface binding while
+recording the public host for MCP Host validation. Host and provider firewall rules
+remain operator-owned, and plain-HTTP exposure should stay on trusted networks/VPNs.
 
 Credentials reside as SHA-256 digests of random tokens in SQL. They are managed by
 CLI, not plaintext config fields. `credentials rotate NAME` preserves identity while

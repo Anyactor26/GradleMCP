@@ -81,3 +81,30 @@ def test_explicit_mcp_host_allowlist_accepts_direct_ip_host(config, token):
             json=request,
         )
     assert response.status_code == 200, response.text
+
+
+def test_all_interface_bind_accepts_requests_at_the_vps_address(config, token):
+    config.host = "0.0.0.0"
+    app = create_app(config, start_scheduler=False)
+    request = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-11-25",
+            "capabilities": {},
+            "clientInfo": {"name": "vps-address", "version": "1"},
+        },
+    }
+    with TestClient(app, base_url="http://203.0.113.9:8000") as http:
+        response = http.post(
+            "/mcp/",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Host": "203.0.113.9:8000",
+                "Accept": "application/json, text/event-stream",
+                "MCP-Protocol-Version": "2025-11-25",
+            },
+            json=request,
+        )
+    assert response.status_code == 200, response.text
