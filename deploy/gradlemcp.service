@@ -9,6 +9,9 @@ Group=gradlemcp
 SupplementaryGroups=docker
 WorkingDirectory=/var/lib/gradlemcp
 Environment=GRADLEMCP_CONFIG=/etc/gradlemcp/config.json
+# Listen on all interfaces so <VPS-IP>:8000 is reachable. Remove this line (or set
+# host in config.json) to keep a loopback-only listener behind a local proxy.
+Environment=GRADLEMCP_HOST=0.0.0.0
 ExecStart=/opt/gradlemcp/.venv/bin/gradlemcp serve
 Restart=on-failure
 TimeoutStopSec=180

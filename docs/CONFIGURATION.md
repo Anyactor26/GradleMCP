@@ -11,7 +11,7 @@ Example JSON (merge into generated config):
 ```json
 {"data_dir":"/var/lib/gradlemcp/data",
  "database_url":"sqlite:////var/lib/gradlemcp/data/gradlemcp.db",
- "host":"127.0.0.1","port":8000,"max_workers":2,"memory_mb":3072,
+ "host":"0.0.0.0","port":8000,"max_workers":2,"memory_mb":3072,
  "total_memory_mb":6144,"cpus":1,"per_client_active":1,
  "toolchains":{"java17":{"image":"gradlemcp-worker:17","java":17,"gradle":"8.14.3"},
                "java21":{"image":"gradlemcp-worker:21","java":21,"gradle":"8.14.3"}}}
@@ -20,7 +20,7 @@ Example JSON (merge into generated config):
 | Field(s) | Meaning / default |
 |---|---|
 | `data_dir`, `database_url` | Durable private storage, SQLite `./data/gradlemcp.db`; alternatively `postgresql+psycopg://...` |
-| `host`, `port` | Native default `127.0.0.1:8000`; Docker controller binds `0.0.0.0` inside its container, and Compose publishes `0.0.0.0:8000` on the host by default so the VPS address is reachable |
+| `host`, `port` | Default `0.0.0.0:8000`, so the VPS address is reachable (set `host` to `127.0.0.1` for a loopback-only listener); the Docker controller also binds `0.0.0.0` inside its container, and Compose publishes `0.0.0.0:8000` on the host by default |
 | `max_workers`, `max_queue` | 1 active slot, 32 globally queued |
 | `per_client_active`, `per_client_queued` | 1, 8; retained upload quota is 4 × queued quota |
 | `memory_mb`, `total_memory_mb` | 2048 each; reservation validation enforces product of worker count and memory |

@@ -154,8 +154,10 @@ docker compose up -d --wait gradlemcp
 ```
 
 The controller (not workers) mounts the Docker socket and is root-equivalent on its
-Docker host. Bindings default to localhost. Use `./gmc` for lifecycle commands; configure
-HTTPS before remote access. [Deployment and tunnel instructions](docs/DEPLOYMENT.md).
+Docker host. It binds every interface by default (`0.0.0.0:8000`), so `<VPS-IP>:8000`
+answers once TCP 8000 is allowed by the firewall; set `host` to `127.0.0.1` for a
+loopback-only listener. Use `./gmc` for lifecycle commands; configure HTTPS before
+remote access. [Deployment and tunnel instructions](docs/DEPLOYMENT.md).
 
 ## Continuous integration
 
