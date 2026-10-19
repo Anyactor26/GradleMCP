@@ -2,6 +2,9 @@
 
 ## 0.1.0 — unreleased
 
+- Bind the controller to `0.0.0.0:8000` by default for native, systemd and Compose
+  deployments, so `<VPS-IP>:8000` is reachable; set `host` to `127.0.0.1` for a
+  loopback-only listener.
 - Automatically provision Docker Engine/Compose from signed packages on Debian 12/13
   and Ubuntu 22.04/24.04 (amd64/arm64, systemd), start the daemon and use sudo without
   a re-login when necessary; no host Python setup required.

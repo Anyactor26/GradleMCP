@@ -130,8 +130,10 @@ enforces cgroups. Supply x86_64/aarch64 images matching your host architecture.
 5. `uv run gradlemcp config validate`; `uv run gradlemcp doctor` checks storage and
    Docker reachability (not whether cgroups or actual builds work). Validate cgroup
    behavior with the supplied Docker integration/security tests and host monitoring.
-6. `uv run gradlemcp serve`; check `GET /health` and `GET /ready`. Missing Docker
-   means readiness is 503; there is deliberately no unrestricted host fallback.
+6. `uv run gradlemcp serve`; check `GET /health` and `GET /ready`. The listener binds
+   `0.0.0.0:8000` by default, so `<VPS-IP>:8000` is reachable once TCP 8000 is allowed
+   by the firewall; set `host` to `127.0.0.1` for a loopback-only listener. Missing
+   Docker means readiness is 503; there is deliberately no unrestricted host fallback.
 7. Send authenticated capabilities/ZIP/build requests using examples or MCP.
 8. Configure an HTTPS endpoint, firewall and egress policy before public exposure.
 

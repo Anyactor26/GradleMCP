@@ -7,11 +7,14 @@ Use one scheduler/one Uvicorn worker; do not horizontally scale this release.
 
 ## A. Private network or VPS IP
 
-Compose publishes the controller as `0.0.0.0:8000:8000` by default, so `http://<VPS-IP>:8000`
-answers once TCP 8000 is allowed in both the OS firewall and the VPS/cloud security group.
+Compose publishes the controller as `0.0.0.0:8000:8000` by default, and a native
+`gradlemcp serve` also binds `0.0.0.0:8000`, so `http://<VPS-IP>:8000` answers once TCP
+8000 is allowed in both the OS firewall and the VPS/cloud security group. Set `host` to
+`127.0.0.1` (or `GRADLEMCP_BIND_ADDRESS=127.0.0.1` for Compose) for a loopback-only
+listener.
 This is plain HTTP and the API is bearer-authenticated, so treat direct exposure as trusted
 network/VPN only; do not transmit real bearer tokens, source ZIPs or build output over
-public plaintext HTTP. To make the controller loopback-only again, run `./gmc expose off`
+public plaintext HTTP. To make the controller loopback-only, run `./gmc expose off`
 (or set `GRADLEMCP_BIND_ADDRESS=127.0.0.1`). `./gmc expose direct <VPS-IP>` records the
 public host for MCP Host validation while keeping the all-interface binding.
 

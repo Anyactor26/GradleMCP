@@ -7,6 +7,11 @@ services:
     # (`./gmc expose off`) for a loopback-only controller.
     ports:
       - "${GRADLEMCP_BIND_ADDRESS:-0.0.0.0}:8000:8000"
+    environment:
+      # Listen on the container interface so the published port and the VPS address
+      # reach the controller. Host-side exposure remains controlled by
+      # GRADLEMCP_BIND_ADDRESS above.
+      GRADLEMCP_HOST: 0.0.0.0
     env_file:
       - .gradlemcp.env
     volumes:

@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="GRADLEMCP_", extra="forbid")
     data_dir: Path = Path("./data")
     database_url: str = "sqlite:///./data/gradlemcp.db"
-    host: str = "127.0.0.1"
+    host: str = "0.0.0.0"
     port: int = Field(default=8000, ge=1, le=65535)
     max_workers: int = Field(default=1, ge=1, le=32)
     max_queue: int = Field(default=32, ge=1)

@@ -1,5 +1,6 @@
 import json
 import logging
+from pathlib import Path
 
 import httpx
 import pytest
@@ -10,6 +11,14 @@ from gradlemcp.endpoint import endpoint_status
 from gradlemcp.errors import ServiceError
 from gradlemcp.observability import JsonFormatter
 from gradlemcp.service import BuildRequest
+
+
+def test_default_listener_is_reachable_at_the_vps_address():
+    # A deployed controller must listen on its interfaces, not only loopback, so
+    # <VPS-IP>:8000 answers without an extra --host flag.
+    assert Settings.model_fields["host"].default == "0.0.0.0"
+    example = json.loads(Path("config/gradlemcp.example.json").read_text())
+    assert example["host"] == "0.0.0.0"
 
 
 def test_precedence(monkeypatch, tmp_path):
