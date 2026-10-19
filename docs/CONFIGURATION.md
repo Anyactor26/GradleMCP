@@ -20,7 +20,7 @@ Example JSON (merge into generated config):
 | Field(s) | Meaning / default |
 |---|---|
 | `data_dir`, `database_url` | Durable private storage, SQLite `./data/gradlemcp.db`; alternatively `postgresql+psycopg://...` |
-| `host`, `port` | `127.0.0.1:8000`; CLI overrides available |
+| `host`, `port` | Native default `127.0.0.1:8000`; Docker controller binds `0.0.0.0` inside its container, while Compose publishes only `127.0.0.1:8000` by default |
 | `max_workers`, `max_queue` | 1 active slot, 32 globally queued |
 | `per_client_active`, `per_client_queued` | 1, 8; retained upload quota is 4 × queued quota |
 | `memory_mb`, `total_memory_mb` | 2048 each; reservation validation enforces product of worker count and memory |
@@ -34,10 +34,19 @@ Example JSON (merge into generated config):
 | `toolchains` | Operator-approved profile map: image, java, gradle, android=false, native=false |
 | `auto_pull` | false; true requires every image be pinned as `registry/image@sha256:<64 hex>` |
 | `wrapper_enabled`, `wrapper_hosts` | false; HTTPS hosts services.gradle.org/downloads.gradle.org |
-| `public_url`, `exposure` | null, private; modes private/direct/proxy/cloudflare/ngrok/custom |
+| `public_url`, `exposure` | null, private; `public_url` must be the exact HTTPS origin; modes private/direct/proxy/cloudflare/ngrok/custom |
+| `mcp_allowed_hosts` | Empty; exact hostname/IP entries with optional port (`example.org:*`), used by MCP Host validation for a direct/custom endpoint |
+| `mcp_allowed_origins` | Empty; exact HTTP(S) origins (optionally wildcard port, such as `http://192.0.2.4:*`) for direct/private MCP browser clients; public HTTPS uses `public_url` |
+| `ui_enabled` | false; enables the optional operator dashboard at `/ui/`; Docker users can toggle it with `./gmc ui on|off` |
 | `tunnel_status_url` | null; operator-owned local ngrok tunnel API, e.g. `http://ngrok:4040/api/tunnels` |
 | `publish_tasks`, `publish_toolchain`, `publish_secrets_file` | Empty/null; allowlisted tasks, dedicated profile, protected Docker env-file |
 | `log_level` | INFO; DEBUG/INFO/WARNING/ERROR |
+
+Compose installs write optional container overrides to `.gradlemcp.env` (0600),
+which is gitignored; Compose's `.env` selects only the host port binding. The safe
+binding is loopback-only. `./gmc expose https DOMAIN` configures Caddy, `public_url` and
+MCP Host validation; `./gmc expose direct HOST` binds `0.0.0.0:8000` for trusted
+private/VPN testing only. Host and provider firewall rules remain operator-owned.
 
 Credentials reside as SHA-256 digests of random tokens in SQL. They are managed by
 CLI, not plaintext config fields. `credentials rotate NAME` preserves identity while

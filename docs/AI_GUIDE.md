@@ -7,9 +7,20 @@ Retrieve capabilities first. JDK versions, SDKs, network permissions, limits and
 publication policy are operator-dependent. Static inspection is advisory, not a
 promise that plugins, target toolchains or dependency repositories will work.
 
-REST uses `Authorization: Bearer $GRADLEMCP_TOKEN`. MCP remote clients send the same
-header; stdio reads `GRADLEMCP_TOKEN`. Never put a token into a URL or project archive.
-Keep source secrets out of logs and outputs. Every build script is executable code.
+REST uses `Authorization: Bearer $GRADLEMCP_TOKEN` on every `/api/v1/...` request.
+Remote MCP is **Streamable HTTP** at `https://HOST/mcp/` (include the trailing slash)
+and uses the same bearer header; it is not legacy SSE and does not implement OAuth
+login/discovery. Native stdio reads `GRADLEMCP_TOKEN`. Never put a token in a URL or
+project archive. Keep source secrets out of logs and outputs. Every build script is
+executable code.
+
+For a custom client, use the HTTPS origin as its base URL, REST path `/api/v1`, MCP
+path `/mcp/`, and first call `GET /api/v1/capabilities` (or MCP `get_capabilities`).
+The capabilities response documents these paths and transport. HTTP `202` means a job
+was accepted, not that it compiled successfully. For the Docker install, the one-time
+token is stored in `data/bootstrap-token.local`; `./gmc token` reveals it deliberately,
+and `./gmc agent create NAME read,build` makes a separate client credential. Do not
+send real credentials over public HTTP.
 
 ## Recommended workflow
 

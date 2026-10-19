@@ -1,0 +1,341 @@
+#!/bin/sh
+# Friendly Docker-backed GradleMCP operations. Secrets are printed only by explicit token commands.
+set -eu
+umask 077
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$ROOT"
+
+usage() {
+    cat <<'HELP'
+GradleMCP operator commands
+
+  ./gmc install [--no-system-changes]  Install Docker if needed, provision and start GradleMCP
+  ./gmc start                         Start the controller (and configured HTTPS proxy)
+  ./gmc stop                          Gracefully stop the controller and HTTPS proxy
+  ./gmc restart                       Gracefully restart the controller
+  ./gmc status                        Show containers and published port
+  ./gmc logs [-f]                     Follow controller logs (add --tail=200, etc.)
+  ./gmc doctor                        Check local readiness and published-port configuration
+  ./gmc endpoint                      Print REST, MCP and optional UI URLs
+  ./gmc token                         Reveal the private bootstrap API token
+  ./gmc credential create NAME [SCOPES]  Create and print a one-time agent token
+  ./gmc credential rotate NAME [SCOPES]  Rotate a token; preserves scopes if omitted
+  ./gmc credential revoke NAME        Revoke a token
+  ./gmc ui on|off|status              Enable or disable the optional monitoring/build UI
+  ./gmc expose https DOMAIN           Set up automatic HTTPS through Caddy (DNS + ports 80/443)
+  ./gmc expose direct HOST            Publish port 8000 directly (HTTP; private/VPN testing only)
+  ./gmc expose off                    Return to the safe localhost-only binding
+  ./gmc help                          Show this help
+
+Remote MCP uses Streamable HTTP at /mcp/ with Authorization: Bearer <token>.
+For public Internet use, prefer `./gmc expose https your.domain`; do not send bearer
+credentials over public plain HTTP. Provider firewalls must still allow inbound 80/443.
+HELP
+}
+
+fail() { printf 'GradleMCP: %s\n' "$*" >&2; exit 1; }
+
+get_value() {
+    file=$1
+    key=$2
+    [ -f "$file" ] || return 0
+    value=$(sed -n "s/^${key}=//p" "$file" | tail -n 1)
+    case "$value" in
+        \'*\') value=${value#\'}; value=${value%\'} ;;
+        \"*\") value=${value#\"}; value=${value%\"} ;;
+    esac
+    printf '%s' "$value"
+}
+
+set_value() {
+    file=$1
+    key=$2
+    action=$3
+    value=${4:-}
+    [ ! -L "$file" ] || fail "Refusing symlinked settings file: $file"
+    if [ -e "$file" ] && [ ! -f "$file" ]; then
+        fail "Settings path is not a regular file: $file"
+    fi
+    temp=$(mktemp "${file}.XXXXXX") || fail "Cannot create temporary settings file for $file"
+    if [ -f "$file" ]; then
+        awk -v key="$key" '
+            {
+                split_at = index($0, "=")
+                if (split_at && substr($0, 1, split_at - 1) == key) next
+                print
+            }
+        ' "$file" > "$temp"
+    fi
+    if [ "$action" = set ]; then
+        printf '%s=%s\n' "$key" "$value" >> "$temp"
+    fi
+    chmod 600 "$temp"
+    mv -f -- "$temp" "$file"
+}
+
+require_install() {
+    [ -f gradlemcp.json ] || fail 'GradleMCP is not installed here. Run ./install.sh first.'
+    [ -f .gradlemcp.env ] || fail 'Missing private controller environment file. Run ./install.sh to create it.'
+}
+
+run_docker() {
+    command -v docker >/dev/null 2>&1 || fail 'Docker CLI not found. Run ./install.sh to install Docker on a supported Linux host.'
+    if docker info >/dev/null 2>&1 || [ "$(id -u)" = 0 ]; then
+        command docker "$@"
+    elif command -v sudo >/dev/null 2>&1; then
+        sudo -- docker "$@"
+    else
+        fail 'This account cannot access Docker and sudo is unavailable. Ask an administrator to grant access; do not chmod the Docker socket.'
+    fi
+}
+
+compose() { run_docker compose "$@"; }
+
+start_service() {
+    require_install
+    domain=$(get_value .env GRADLEMCP_DOMAIN)
+    if [ -n "$domain" ]; then
+        compose --profile tls up -d --wait --wait-timeout 120 gradlemcp caddy
+    else
+        compose up -d --wait --wait-timeout 120 gradlemcp
+    fi
+}
+
+stop_service() {
+    require_install
+    domain=$(get_value .env GRADLEMCP_DOMAIN)
+    if [ -n "$domain" ]; then
+        compose --profile tls stop -t 180 caddy >/dev/null 2>&1 || true
+    fi
+    compose stop -t 180 gradlemcp
+}
+
+print_endpoint() {
+    domain=$(get_value .env GRADLEMCP_DOMAIN)
+    public_host=$(get_value .env GRADLEMCP_PUBLIC_HOST)
+    if [ -n "$domain" ]; then
+        base="https://$domain"
+        printf 'HTTPS:      %s (Caddy terminates TLS; verify DNS and inbound firewall rules)\n' "$base"
+    elif [ -n "$public_host" ]; then
+        base="http://$public_host:8000"
+        printf 'Direct URL: %s (plain HTTP; do not send production credentials over the public Internet)\n' "$base"
+    else
+        base='http://127.0.0.1:8000'
+        printf 'Private URL: %s (localhost only)\n' "$base"
+    fi
+    printf 'REST API:   %s/api/v1\n' "$base"
+    printf 'MCP:        %s/mcp/ (Streamable HTTP; Authorization: Bearer <token>)\n' "$base"
+    printf 'OpenAPI:    %s/openapi.json\n' "$base"
+    printf 'Dashboard:  %s/ui/ (optional; enable with ./gmc ui on)\n' "$base"
+}
+
+print_ui_url() {
+    domain=$(get_value .env GRADLEMCP_DOMAIN)
+    public_host=$(get_value .env GRADLEMCP_PUBLIC_HOST)
+    if [ -n "$domain" ]; then
+        printf 'https://%s/ui/\n' "$domain"
+    elif [ -n "$public_host" ]; then
+        printf 'http://%s:8000/ui/\n' "$public_host"
+    else
+        printf 'http://127.0.0.1:8000/ui/\n'
+    fi
+}
+
+validate_host() {
+    host=$1
+    case "$host" in
+        ''|.*|*.|*..*|*-.*|*.-*|-*|*-|*[!A-Za-z0-9.-]*)
+            fail 'Host must be a DNS name or IPv4 address without a scheme, port, path or whitespace.'
+            ;;
+    esac
+    case "$host" in
+        *[A-Za-z]*) ;;
+        *) [ "$2" != https ] || fail 'Automatic HTTPS requires a DNS name, not a bare IP address.' ;;
+    esac
+}
+
+credential_command() {
+    action=${1:-}
+    name=${2:-}
+    scopes=${3:-}
+    [ -n "$action" ] || fail 'Usage: ./gmc credential create|rotate|revoke NAME [SCOPES]'
+    case "$action" in
+        create)
+            [ -n "$name" ] || fail 'Usage: ./gmc credential create NAME [SCOPES]'
+            require_install
+            compose run --rm --no-deps gradlemcp credentials create "$name" --scopes "${scopes:-read,build}"
+            ;;
+        rotate)
+            [ -n "$name" ] || fail 'Usage: ./gmc credential rotate NAME [SCOPES]'
+            require_install
+            if [ -n "$scopes" ]; then
+                compose run --rm --no-deps gradlemcp credentials rotate "$name" --scopes "$scopes"
+            else
+                compose run --rm --no-deps gradlemcp credentials rotate "$name"
+            fi
+            ;;
+        revoke)
+            [ -n "$name" ] || fail 'Usage: ./gmc credential revoke NAME'
+            require_install
+            compose run --rm --no-deps gradlemcp credentials revoke "$name"
+            ;;
+        *) fail 'Credential actions are create, rotate or revoke.' ;;
+    esac
+}
+
+cmd=${1:-help}
+case "$cmd" in
+    help|-h|--help)
+        usage
+        ;;
+    install)
+        shift
+        exec "$ROOT/install.sh" "$@"
+        ;;
+    start|up)
+        start_service
+        print_endpoint
+        ;;
+    stop|down)
+        stop_service
+        printf 'GradleMCP stopped. Durable config, credentials and build data were preserved.\n'
+        ;;
+    restart)
+        stop_service
+        start_service
+        print_endpoint
+        ;;
+    status)
+        require_install
+        domain=$(get_value .env GRADLEMCP_DOMAIN)
+        if [ -n "$domain" ]; then compose --profile tls ps; else compose ps; fi
+        printf '\n'
+        print_endpoint
+        printf '\nPublished controller port: '
+        compose port gradlemcp 8000 2>/dev/null || printf 'not published (service may be stopped)\n'
+        ;;
+    logs)
+        require_install
+        shift || true
+        domain=$(get_value .env GRADLEMCP_DOMAIN)
+        if [ -n "$domain" ]; then
+            compose --profile tls logs --tail=200 "$@" gradlemcp caddy
+        else
+            compose logs --tail=200 "$@" gradlemcp
+        fi
+        ;;
+    doctor)
+        require_install
+        domain=$(get_value .env GRADLEMCP_DOMAIN)
+        if [ -n "$domain" ]; then compose --profile tls ps; else compose ps; fi
+        printf '\nController health and readiness (from inside its container):\n'
+        compose exec -T gradlemcp python -c "import json,urllib.request; health=urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).status==200; ready=json.load(urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=5)); print(json.dumps({'health':'ok' if health else 'failed','ready':ready}, indent=2)); raise SystemExit(0 if health and ready.get('ready') else 1)"
+        printf '\nEndpoint configuration:\n'
+        print_endpoint
+        printf '\nExternal reachability is not inferred here. Verify DNS and the VPS/cloud firewall from another network.\n'
+        ;;
+    endpoint)
+        print_endpoint
+        ;;
+    token|key)
+        TOKEN=data/bootstrap-token.local
+        [ ! -L "$TOKEN" ] || fail 'Refusing a symlinked token path.'
+        [ -f "$TOKEN" ] && [ -s "$TOKEN" ] || fail 'No bootstrap API token found. Run ./install.sh first.'
+        chmod 600 "$TOKEN"
+        cat "$TOKEN"
+        ;;
+    credential)
+        shift
+        credential_command "$@"
+        ;;
+    agent)
+        shift
+        action=${1:-}
+        [ "$action" = create ] || fail 'Usage: ./gmc agent create NAME [SCOPES]'
+        shift
+        credential_command create "${1:-}" "${2:-read,build}"
+        ;;
+    ui)
+        action=${2:-status}
+        case "$action" in
+            on|enable)
+                require_install
+                set_value .gradlemcp.env GRADLEMCP_UI_ENABLED set true
+                start_service
+                printf 'Optional dashboard enabled: '
+                print_ui_url
+                printf 'The dashboard asks for a token and keeps it in browser memory only.\n'
+                ;;
+            off|disable)
+                require_install
+                set_value .gradlemcp.env GRADLEMCP_UI_ENABLED set false
+                start_service
+                printf 'Optional dashboard disabled.\n'
+                ;;
+            status)
+                enabled=$(get_value .gradlemcp.env GRADLEMCP_UI_ENABLED)
+                case "$enabled" in true|True|1|yes|on) printf 'Dashboard: enabled at ';;
+                    *) printf 'Dashboard: disabled. Enable with ./gmc ui on.\n'; exit 0 ;;
+                esac
+                print_ui_url
+                ;;
+            *) fail 'Use ./gmc ui on, ./gmc ui off or ./gmc ui status.' ;;
+        esac
+        ;;
+    expose)
+        mode=${2:-}
+        case "$mode" in
+            https)
+                host=${3:-}
+                validate_host "$host" https
+                require_install
+                set_value .env GRADLEMCP_BIND_ADDRESS set 127.0.0.1
+                set_value .env GRADLEMCP_PUBLIC_HOST unset
+                set_value .env GRADLEMCP_DOMAIN set "$host"
+                set_value .gradlemcp.env GRADLEMCP_PUBLIC_URL set "https://$host"
+                set_value .gradlemcp.env GRADLEMCP_EXPOSURE set proxy
+                set_value .gradlemcp.env GRADLEMCP_MCP_ALLOWED_HOSTS set "'[\"$host:*\"]'"
+                set_value .gradlemcp.env GRADLEMCP_MCP_ALLOWED_ORIGINS set "[]"
+                compose --profile tls up -d --wait --wait-timeout 120 gradlemcp caddy
+                printf 'HTTPS proxy is starting. DNS for %s must point to this VPS and inbound TCP 80/443 must be allowed.\n' "$host"
+                print_endpoint
+                ;;
+            direct|http)
+                host=${3:-}
+                validate_host "$host" direct
+                require_install
+                set_value .env GRADLEMCP_BIND_ADDRESS set 0.0.0.0
+                set_value .env GRADLEMCP_PUBLIC_HOST set "$host"
+                set_value .env GRADLEMCP_DOMAIN unset
+                set_value .gradlemcp.env GRADLEMCP_PUBLIC_URL set null
+                set_value .gradlemcp.env GRADLEMCP_EXPOSURE set direct
+                set_value .gradlemcp.env GRADLEMCP_MCP_ALLOWED_HOSTS set "'[\"$host:*\"]'"
+                set_value .gradlemcp.env GRADLEMCP_MCP_ALLOWED_ORIGINS set "'[\"http://$host:*\"]'"
+                compose --profile tls stop caddy >/dev/null 2>&1 || true
+                compose up -d --wait --wait-timeout 120 gradlemcp
+                printf 'WARNING: port 8000 is now published on all interfaces using plain HTTP. Use only behind a trusted VPN/firewall or for testing.\n'
+                print_endpoint
+                printf 'If still unreachable, open TCP 8000 in both the VPS firewall and cloud-provider security group.\n'
+                ;;
+            off|private)
+                require_install
+                set_value .env GRADLEMCP_BIND_ADDRESS set 127.0.0.1
+                set_value .env GRADLEMCP_PUBLIC_HOST unset
+                set_value .env GRADLEMCP_DOMAIN unset
+                set_value .gradlemcp.env GRADLEMCP_PUBLIC_URL set null
+                set_value .gradlemcp.env GRADLEMCP_EXPOSURE set private
+                set_value .gradlemcp.env GRADLEMCP_MCP_ALLOWED_HOSTS set "[]"
+                set_value .gradlemcp.env GRADLEMCP_MCP_ALLOWED_ORIGINS set "[]"
+                compose --profile tls stop caddy >/dev/null 2>&1 || true
+                start_service
+                printf 'Returned to the safe localhost-only listener.\n'
+                print_endpoint
+                ;;
+            *) fail 'Use ./gmc expose https DOMAIN, ./gmc expose direct HOST or ./gmc expose off.' ;;
+        esac
+        ;;
+    *)
+        usage >&2
+        fail "Unknown command: $cmd"
+        ;;
+esac

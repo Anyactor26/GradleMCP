@@ -11,7 +11,7 @@ management is local-only, deliberately not an HTTP remote admin shell.
 | GET | `/health` | Public minimal liveness |
 | GET | `/ready` | Public minimal Docker/storage readiness, 503 when unavailable |
 | GET | `/api/v1/capabilities` | Limits, profiles, states and policy / read |
-| GET | `/api/v1/system/endpoint` | Configured URL, exposure and probe state / read |
+| GET | `/api/v1/system/endpoint` | Configured URL, exposure/probe state, REST path and exact Streamable HTTP MCP path / read |
 | GET | `/api/v1/system/toolchains`, `/api/v1/toolchains` | Approved profiles / read |
 | POST | `/api/v1/projects` | Raw ZIP bytes → 201 `{project_id,inspection}` / build |
 | POST | `/api/v1/projects/inspect` | `{project_id,subdirectory?}` → static inspection / read |
@@ -27,6 +27,12 @@ management is local-only, deliberately not an HTTP remote admin shell.
 | POST | `/api/v1/builds/{id}/publish` | `{tasks:[...],idempotency_key:"..."}` → 202 publication Job / publish |
 | GET | `/api/v1/queue` | Counts, client queued, available slots, free disk / read |
 | GET | `/api/v1/metrics` | Prometheus text gauges / admin |
+
+`GET /api/v1/capabilities` and `/api/v1/system/endpoint` also advertise protocol
+paths: REST `/api/v1`, remote MCP Streamable HTTP `/mcp/` (trailing slash), with
+`Authorization: Bearer <token>`. A configured URL is not proof of external reachability.
+The optional operator UI is disabled by default; enable it on a Docker install with
+`./gmc ui on`. Its `/ui/` page does not bypass API authentication.
 
 BuildRequest:
 ```json

@@ -34,8 +34,11 @@ has Docker administration capability; compromising it is host compromise.
 - Secrets injected only into explicitly authorized publication workers; no publication
   logs/artifacts exported, no automatic publication replay. All Gradle jobs can execute
   code; never inject credentials into a project you do not trust.
-- Minimal public health/readiness; all capabilities, metrics and documentation require
+- Minimal public health/readiness; capabilities, metrics, docs and all build data require
   authentication. Origin checks and MCP SDK DNS-rebinding/Host defenses. No wildcard CORS.
+- Optional dashboard is disabled by default and serves only static login/UI assets without
+  a token. API calls remain bearer-authenticated; the UI holds a user-entered token in
+  page memory only (not localStorage/cookies) and clears it on logout/page reload.
 
 ## Network and SSRF
 
@@ -73,7 +76,9 @@ records need an operator archival policy at high volume.
 API rate limiting is single-process, in-memory and resets on restart. Put connection,
 unauthenticated request-rate, body/read timeout, and request concurrency limits at the
 reverse proxy/firewall. Only one application worker/scheduler is supported. Do not
-expose Uvicorn directly to a high-risk public internet workload. TLS is external.
+expose Uvicorn directly to a high-risk public internet workload. HTTPS can be terminated
+by the optional Caddy Compose profile or another operator-managed proxy; DNS, firewall
+rules, certificate monitoring and proxy hardening remain operator responsibilities.
 
 Pattern-based log redaction is best effort and cannot guarantee removal of arbitrary
 or encoded secrets, including patterns split across pipe chunks. Never place secrets

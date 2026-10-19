@@ -17,7 +17,7 @@ def create_mcp(service):
     mcp = MCPServer(
         "GradleMCP",
         version="0.1.0",
-        instructions="Upload a ZIP, inspect compatibility, submit once, poll queued/running jobs, then retrieve bounded logs and artifacts. Never blindly retry publication. See docs/AI_GUIDE.md.",
+        instructions="Remote transport: Streamable HTTP at /mcp/ (trailing slash) with Authorization: Bearer <token>; local transport: stdio. REST base path is /api/v1. Upload a ZIP, inspect compatibility, submit once with an idempotency key, poll queued/preparing/running jobs, then retrieve bounded logs and artifacts. HTTP 202 is acceptance, not build success. Never blindly retry publication. Discover policy with get_capabilities. See docs/AI_GUIDE.md.",
     )
 
     def call(method, *args, **kwargs):

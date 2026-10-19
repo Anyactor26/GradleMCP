@@ -8,10 +8,10 @@ From a downloaded/cloned checkout, run:
 ./install.sh
 ```
 
-Or fetch the current implementation and install in a single command:
+Or clone the repository's default branch and install in a single command:
 
 ```sh
-git clone --branch arena/6626d3dc-gradlemcp https://github.com/Anyactor26/GradleMCP.git && cd GradleMCP && ./install.sh
+git clone https://github.com/Anyactor26/GradleMCP.git && cd GradleMCP && ./install.sh
 ```
 
 For a VPS without Git, the README provides a single command that first installs Git
@@ -51,9 +51,9 @@ package/repository/daemon changes, though accessing an existing daemon may use s
 5. Install docker-ce, docker-ce-cli, containerd.io, Buildx and Compose plugins; enable
    and start Docker with systemd. For a compatible but stopped existing engine, only
    startup is requested. No Docker-group grant/socket chmod is performed.
-6. Build controller/Java 17 worker, initialize private config/storage only if absent,
-   create an installer-agent read/build credential, start Compose and verify both
-   readiness and authenticated API access.
+6. Build the Python controller/Java 17 worker containers, initialize private
+   config/storage and `.gradlemcp.env` only if absent, create an installer-agent
+   read/build credential, start Compose and verify readiness plus authenticated API access.
 
 The controller copies a modern standalone Docker CLI from docker:28-cli rather than
 Debian's older docker.io package; the controller never runs its own daemon. Pin base
@@ -80,10 +80,25 @@ If the token is lost/revoked or the DB replaced, restore a consistent backup or 
 the container CLI to explicitly rotate installer-agent; protect the new token output.
 Operator-customized config/storage paths may need corresponding Compose mounts.
 
-Endpoints default to localhost:8000 and localhost:8000/mcp/. Configure public HTTPS
-separately. Stop/start with `(sudo) docker compose stop gradlemcp` /
-`(sudo) docker compose up -d gradlemcp`. Container-created database files may be root
-owned; use the container CLI rather than mixing native and container maintenance.
+The controller's Python, Java worker runtime and Gradle toolchain live in containers;
+no host Python/Java/Gradle/uv install is needed for this path. Endpoints default to
+localhost:8000, `/api/v1` (REST), and `/mcp/` (authenticated Streamable HTTP). Use
+`./gmc start|stop|restart|status|logs|doctor|token` rather than remembering Compose
+flags. Stop requests a graceful controller shutdown; durable data and credentials remain.
+
+For a public deployment with a DNS name, `./gmc expose https builds.example.org`
+configures the optional Caddy TLS proxy. Point DNS to the VPS and allow inbound TCP
+80/443 in both the OS and provider firewall. Use `./gmc expose direct <VPS-IP>` only
+for testing or a trusted private/VPN: it publishes plain HTTP on 8000 and must not carry
+real tokens across the public Internet. The application cannot open a cloud-provider
+security group or prove external reachability. Run `./gmc doctor` for local status and
+check remote firewall/NAT/DNS from a separate network.
+
+Optional web dashboard: `./gmc ui on` serves `/ui/`; `./gmc ui off` disables it. The
+page requires an API token, stores it only in page memory, and supports queue/build
+monitoring, manual ZIP compilation, logs, cancellation, diagnostics and artifacts.
+Container-created database files may be root owned; use the container CLI rather than
+mixing native and container maintenance.
 
 **Verification boundary:** automatic package setup is exercised against controlled
 OS-tool/filesystem fixtures, including invalid keys, unsupported hosts, conflicts,
@@ -140,11 +155,12 @@ worker image and configuration revisions in your operations inventory.
 
 ## Container controller
 
-See the README and `compose.yaml`. Initialize the JSON config first; otherwise a
-missing bind-mounted file can become a directory. The data directory is durable.
-Do not mount the entire host into workers. Only the trusted controller receives
-the Docker socket. Compose starts/stops only the services you request; workers are
-created dynamically and named `gradlemcp-<job UUID>`.
+See the README and `compose.yaml`. Initialize `gradlemcp.json` and copy
+`config/gradlemcp.env.example` to `.gradlemcp.env` (mode 0600) before starting Compose;
+a missing bind-mounted config or environment file causes startup errors. The data
+directory is durable. Do not mount the entire host into workers. Only the trusted
+controller receives the Docker socket. Use `./gmc` for stop/start and optional UI/HTTPS
+configuration; workers are created dynamically and named `gradlemcp-<job UUID>`.
 
 ## Upgrade and backup
 

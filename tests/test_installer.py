@@ -90,6 +90,7 @@ def test_installer_complete_flow_and_private_token(installer):
     assert token.read_text().strip() == "installer-agent.controlled-fixture-token"
     assert token.stat().st_mode & 0o777 == 0o600
     assert (root / "gradlemcp.json").stat().st_mode & 0o777 == 0o600
+    assert (root / ".gradlemcp.env").stat().st_mode & 0o777 == 0o600
     assert "controlled-fixture-token" not in result.stdout + result.stderr
     commands = [json.loads(line) for line in log.read_text().splitlines()]
     assert any(c[:2] == ["build", "-f"] for c in commands)
@@ -206,3 +207,14 @@ def test_sudo_denied_prevents_installation(installer):
     assert result.returncode != 0
     assert not Path(env["SYSTEM_SETUP_LOG"]).exists()
     assert not (root / "data").exists()
+
+
+def test_app_environment_symlink_is_rejected(installer, tmp_path):
+    root, _, _ = installer
+    outside = tmp_path / "outside.env"
+    outside.write_text("GRADLEMCP_UI_ENABLED=true\n")
+    (root / ".gradlemcp.env").symlink_to(outside)
+    result = run(installer)
+    assert result.returncode != 0
+    assert "symlink" in result.stderr.lower()
+    assert outside.read_text() == "GRADLEMCP_UI_ENABLED=true\n"

@@ -37,6 +37,9 @@
     }
   },
   "public_url": null,
+  "mcp_allowed_hosts": [],
+  "mcp_allowed_origins": [],
+  "ui_enabled": false,
   "exposure": "private",
   "tunnel_status_url": null,
   "publish_tasks": [],

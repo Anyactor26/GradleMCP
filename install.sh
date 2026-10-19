@@ -15,9 +15,10 @@ on Debian 12/13 or Ubuntu 22.04/24.04 (amd64/arm64, systemd) when needed.
 Root or sudo permission is required for OS package/daemon setup and Docker access.
 No host Python, Java, Gradle or uv installation is needed.
 
-Builds the controller and Java 17 worker, preserves existing config/data/token,
-creates a private bootstrap credential, starts the service and checks readiness.
-Listens on 127.0.0.1:8000 only. Configure HTTPS separately for remote access.
+Builds the Python controller and Java 17 worker in Docker, preserves existing
+config/data/token, creates a private API credential and starts the service. Python,
+Java, Gradle and uv are inside the containers; no host Python install is required.
+Listens on 127.0.0.1:8000 by default. Use ./gmc for start/stop/status/token/UI commands.
 
 --check              Read-only checks; never requests sudo or installs anything.
 --no-system-changes  Require an existing running Docker + Compose; no OS changes.
@@ -109,6 +110,20 @@ if [ ! -e gradlemcp.json ]; then
     TEMP_CONFIG=''
 fi
 [ -f gradlemcp.json ] || fail 'gradlemcp.json must be a regular JSON configuration file.'
+[ ! -L .gradlemcp.env ] || fail 'Refusing a symlink at .gradlemcp.env.'
+if [ ! -e .gradlemcp.env ]; then
+    TEMP_CONFIG=$(mktemp .gradlemcp-env.XXXXXX)
+    if [ -f config/gradlemcp.env.example ]; then
+        cat config/gradlemcp.env.example > "$TEMP_CONFIG"
+    else
+        : > "$TEMP_CONFIG"
+    fi
+    chmod 600 "$TEMP_CONFIG"
+    mv -- "$TEMP_CONFIG" .gradlemcp.env
+    TEMP_CONFIG=''
+fi
+[ -f .gradlemcp.env ] || fail '.gradlemcp.env must be a regular environment file.'
+chmod 600 .gradlemcp.env
 TOKEN=data/bootstrap-token.local
 [ ! -L "$TOKEN" ] || fail 'Refusing a symlink at the bootstrap token path.'
 
@@ -137,12 +152,12 @@ printf 'Starting GradleMCP and waiting for health...\n'
 docker compose up -d --wait --wait-timeout 120 gradlemcp
 docker compose exec -T gradlemcp python -c "import urllib.request; from pathlib import Path; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=10).close(); token=Path('data/bootstrap-token.local').read_text().strip(); request=urllib.request.Request('http://127.0.0.1:8000/api/v1/capabilities', headers={'Authorization':'Bearer '+token}); urllib.request.urlopen(request, timeout=10).close()"
 printf '\nGradleMCP is ready at http://127.0.0.1:8000\n'
-printf 'Private API token saved to %s/%s (0600); token not printed.\n' "$ROOT" "$TOKEN"
-printf 'MCP: http://127.0.0.1:8000/mcp/ (send the bearer token).\n'
-if [ "$USE_SUDO" = 1 ]; then
-    printf 'Manage: sudo docker compose logs -f gradlemcp | sudo docker compose stop gradlemcp\n'
-else
-    printf 'Manage: docker compose logs -f gradlemcp | docker compose stop gradlemcp\n'
-fi
+printf 'Private API token saved to %s/%s (0600); reveal it only when needed with ./gmc token.\n' "$ROOT" "$TOKEN"
+printf 'REST API: http://127.0.0.1:8000/api/v1\n'
+printf 'Remote MCP: http://127.0.0.1:8000/mcp/ (Streamable HTTP; Authorization: Bearer <token>).\n'
+printf 'Commands: ./gmc start | stop | restart | status | logs | doctor | token\n'
+printf 'Docker management uses docker compose (or sudo docker compose when required); ./gmc detects access automatically.\n'
+printf 'Optional dashboard: ./gmc ui on (then open http://127.0.0.1:8000/ui/).\n'
+printf 'Secure public access: ./gmc expose https <your-domain> (DNS + inbound 80/443 required).\n'
 printf 'Re-run ./install.sh safely; config, data and existing credentials are preserved.\n'
-printf 'Remote access requires an explicitly configured HTTPS proxy/tunnel; see docs/DEPLOYMENT.md.\n'
+printf 'External reachability depends on DNS and VPS/cloud firewall rules; see docs/DEPLOYMENT.md.\n'

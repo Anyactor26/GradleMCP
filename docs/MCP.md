@@ -24,11 +24,20 @@ Do not let unrelated tenants run local adapters; local filesystem/DB access is t
 
 ## Remote Streamable HTTP
 
-URL: `https://builds.example.org/mcp/` (trailing slash). Configure matching `public_url`
-so the SDK Host/Origin defenses allow the public host. Send a manual bearer API token
-on **every** request. Origins other than the configured public URL are rejected.
-TLS termination belongs at the reverse proxy/tunnel. Tools apply the same scopes,
-ownership checks, quota and scheduler as REST, including credential revocation.
+URL: `https://builds.example.org/mcp/` (include the trailing slash). This is MCP
+Streamable HTTP; the REST base is `https://builds.example.org/api/v1`. Configure the
+exact `public_url` so Host/Origin defenses allow the public host. Send a manual bearer
+API token in `Authorization` on **every** request. When `public_url` is set, only that
+HTTPS origin is accepted; for direct private testing, configure explicit
+`mcp_allowed_hosts` and `mcp_allowed_origins`. TLS termination belongs at the reverse
+proxy/tunnel. Tools apply the same scopes, ownership checks, quota and scheduler as
+REST, including credential revocation.
+
+For the Docker installer, run `./gmc expose https builds.example.org` to start the
+optional Caddy TLS profile after DNS and inbound ports 80/443 are configured. Create a
+dedicated token with `./gmc agent create my-agent read,build`; the token is printed once.
+A custom client must support a configured bearer header. Use `./gmc endpoint` to display
+paths; `./gmc doctor` reports local health but cannot check a cloud firewall from outside.
 
 Example conceptual client configuration:
 ```json

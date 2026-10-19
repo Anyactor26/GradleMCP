@@ -7,13 +7,18 @@ Use one scheduler/one Uvicorn worker; do not horizontally scale this release.
 
 ## A. Private network or VPS IP
 
-`host` and `port` are configurable. Default localhost is appropriate behind a proxy.
-To serve an internal network, bind the intended interface and restrict ingress to
-agent hosts/VPN. Set `GRADLEMCP_URL` in clients. For a direct VPS public IP, terminate
-TLS at an HTTPS proxy capable of issuing a certificate for your configured identity
-(or use a DNS name). Open only required inbound ports, usually 443 and 80 for ACME;
-keep 8000 and the Docker socket private. Do not transmit real bearer tokens over
-public plaintext HTTP. IPv6 firewall rules must match IPv4 policy.
+Compose publishes the controller as `127.0.0.1:8000:8000` by default. This is
+intentionally private: `http://<VPS-IP>:8000` will not answer from outside until the
+host binding is changed. `./gmc expose direct <VPS-IP>` can publish port 8000 on all
+interfaces, but that is plain HTTP and is suitable only for trusted private/VPN testing.
+Do not transmit real bearer tokens, source ZIPs or build output over public plaintext HTTP.
+
+For a public endpoint, terminate TLS at a reverse proxy. The one-command Caddy setup is
+`./gmc expose https builds.example.org` (see section B). Point DNS at the server and
+allow inbound ports 80/443 in both the OS firewall and VPS/cloud security group. Set
+`GRADLEMCP_URL` in REST clients to the HTTPS origin; MCP clients use the exact `/mcp/`
+path. IPv6 firewall rules must match IPv4 policy. GradleMCP cannot edit provider-level
+firewalls/NAT rules, and a configured endpoint is not proof of external reachability.
 
 Set `public_url=https://builds.example.org` and `exposure=direct`/`proxy` as appropriate.
 Do not add trailing paths/slashes to the public base URL. GradleMCP never attempts to
@@ -21,11 +26,28 @@ infer your public IP or punch through NAT automatically.
 
 ## B. Reverse proxy
 
-`deploy/Caddyfile` is a working template: replace the DNS name, point DNS at the server,
-install/start Caddy, and permit ACME validation. Caddy handles certificate issuance
-and renewal; monitor its renewal failures. Keep Uvicorn on 127.0.0.1:8000, or a
-private Compose network. `public_url` must match the client-facing HTTPS origin.
-Preserve Authorization and Host. MCP is `/mcp/`, not the deprecated SSE transport.
+### Automatic Caddy profile
+
+`./gmc expose https builds.example.org` writes the protected endpoint configuration and
+starts the optional Caddy Compose profile. Point the domain's A/AAAA record to the VPS
+and allow inbound TCP 80/443 (optionally UDP 443) through the OS and provider firewalls.
+Caddy obtains and renews TLS certificates automatically. GradleMCP's public controller
+port remains bound to localhost; do not publish 8000 or the Docker socket to the Internet.
+
+The command configures `public_url=https://builds.example.org` and the MCP Host allowlist.
+Use `https://builds.example.org/api/v1` for REST and
+`https://builds.example.org/mcp/` for remote Streamable HTTP MCP. `./gmc expose off`
+returns the controller to localhost-only mode. Preserve Authorization and Host headers.
+MCP is `/mcp/`, not the deprecated SSE transport. Review `deploy/Caddyfile` before use.
+Monitor Caddy's logs and certificate renewal status.
+
+### Manual proxy alternative
+
+`deploy/Caddyfile` can also be used with external Caddy; provide `GRADLEMCP_DOMAIN`,
+configure `public_url` to the exact HTTPS origin, and change its `reverse_proxy`
+upstream from the Compose service name `gradlemcp:8000` to the controller's private
+address (for example, `127.0.0.1:8000`). Ensure the proxy can reach the controller over
+a private network. Never forward credentials via untrusted plain HTTP.
 
 Configure production proxy connection/request limits, request-body limits (at least
 ~22 MiB for default base64 MCP uploads; binary ZIP is 16 MiB), body read deadlines,

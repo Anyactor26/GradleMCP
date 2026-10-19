@@ -30,10 +30,43 @@ def test_network_and_image_policy():
     settings = Settings(
         auto_pull=True,
         toolchains={
-            "java17": {"image": "approved/image@sha256:" + "a" * 64, "java": 17, "gradle": "8.14.3"}
+            "java17": {
+                "image": "approved/image@sha256:" + "a" * 64,
+                "java": 17,
+                "gradle": "8.14.3",
+            }
         },
     )
     assert settings.auto_pull
+
+
+def test_endpoint_allowlists_must_be_specific_and_valid():
+    with pytest.raises(ValidationError):
+        Settings(public_url="https://example.org:70000")
+    for host in (
+        "*",
+        "*.example.org:*",
+        "-bad.example.org",
+        "https://example.org",
+        "example.org:70000",
+        "[::::]:*",
+        "bad host",
+    ):
+        with pytest.raises(ValidationError):
+            Settings(mcp_allowed_hosts=[host])
+    assert Settings(
+        mcp_allowed_hosts=["builds.example.org:*", "198.51.100.9:8000", "[2001:db8::1]:*"]
+    ).mcp_allowed_hosts
+    for origin in (
+        "*",
+        "http://*",
+        "https://example.org/path",
+        "http://example.org:80:*",
+        "ftp://example.org",
+    ):
+        with pytest.raises(ValidationError):
+            Settings(mcp_allowed_origins=[origin])
+    assert Settings(mcp_allowed_origins=["http://198.51.100.9:*"]).mcp_allowed_origins
 
 
 def test_rate_limit(http, service):

@@ -4,4 +4,6 @@
 - Machine API: docs/openapi.json
 - MCP integration: docs/MCP.md
 - Security and limitations: docs/SECURITY_MODEL.md
-Capabilities: authenticated GET /api/v1/capabilities. MCP: /mcp/ or stdio.
+- Operations/UI: README.md, docs/INSTALLATION.md
+REST base: /api/v1; first call authenticated GET /api/v1/capabilities.
+Remote MCP: Streamable HTTP at /mcp/ (trailing slash), with Authorization: Bearer <token>; stdio is also supported.
