@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from gradlemcp.api import create_app
@@ -88,6 +90,41 @@ def test_dashboard_is_optional_and_authenticated_ui_api_stays_protected(tmp_path
             ).status_code
             == 403
         )
+
+
+def test_dashboard_ships_theme_toggle_and_self_contained_assets():
+    web_root = Path(__file__).resolve().parents[1] / "src" / "gradlemcp" / "web"
+    index = (web_root / "index.html").read_text()
+    script = (web_root / "assets" / "app.js").read_text()
+    styles = (web_root / "assets" / "styles.css").read_text()
+
+    # Manual light/dark override plus OS-level dark mode support.
+    assert 'id="themeToggle"' in index
+    assert "icon-moon" in index and "icon-sun" in index
+    assert "initTheme" in script and "gradlemcp-theme" in script
+    assert "prefers-color-scheme: dark" in styles
+    assert '[data-theme="dark"]' in styles
+
+    # Self-hosted/CSP-safe: no external font/stylesheet references (the SVG
+    # namespace URL inside the data-URI favicon is an identifier, not a fetch).
+    assert 'rel="icon" href="data:image/svg+xml' in index
+    assert 'href="http' not in index and 'src="http' not in index
+    assert "fonts.googleapis" not in styles and "@import" not in styles
+    assert "url(http" not in styles
+    # Every interactive status class the JavaScript generates still has styling.
+    for class_name in (
+        "badge-success",
+        "badge-danger",
+        "badge-running",
+        "badge-queued",
+        "badge-neutral",
+        "indicator-error",
+        "indicator-busy",
+        "sidebar-open",
+        "has-file",
+        "dragging",
+    ):
+        assert f".{class_name}" in styles
 
 
 def test_agent_discovery_documents_exact_protocol_paths(http):

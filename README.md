@@ -115,6 +115,13 @@ requests; it does not save tokens in localStorage or cookies. Use HTTPS for remo
 browsers. The dashboard is separate from the API/MCP protocols and is not required by
 AI agents.
 
+The interface is fully self-contained: system font stacks and an inline SVG favicon
+only, with no external font/CDN requests, so it works on air-gapped VPS hosts and
+satisfies the strict Content-Security-Policy. A light and a dark theme are included;
+the theme follows the OS preference automatically and can be switched from the topbar
+(only the theme choice is stored locally, never credentials). The layout is responsive
+down to phone widths, with a slide-in navigation on small screens.
+
 ## Manual / development installation
 
 
