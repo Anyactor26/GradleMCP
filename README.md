@@ -51,7 +51,9 @@ OS password. No Docker-group change, re-login, or manual daemon start is needed.
 Review `install.sh`, `scripts/install-docker.sh`, `gmc` and the Dockerfiles before
 running with administrative access.
 
-- REST API: `http://127.0.0.1:8000/api/v1`; MCP: `http://127.0.0.1:8000/mcp/` (Streamable HTTP).
+- REST API: `http://<VPS-IP>:8000/api/v1`; MCP: `http://<VPS-IP>:8000/mcp/` (Streamable HTTP).
+  Port 8000 is published on all interfaces by default; allow TCP 8000 in the OS and
+  provider firewalls, or run `./gmc expose off` for loopback-only.
 - API token is generated automatically and saved to `data/bootstrap-token.local` (0600).
   Reveal it deliberately with `./gmc token`; it is never printed by installation.
 - `./gmc start`, `stop`, `restart`, `status`, `logs`, `doctor` and `endpoint` manage the service.
@@ -61,8 +63,10 @@ running with administrative access.
 - Config, data and credentials survive stop/restart/reinstall; no silent token rotation.
 - No world-writable sockets, automatic Docker-group grants, or downloaded root shell scripts.
 
-**Why a VPS IP:8000 can appear unreachable:** the safe default publishes port 8000 on
-localhost only. For a public domain with automatic HTTPS, run:
+**Reaching `<VPS-IP>:8000`:** port 8000 is published on all interfaces, so it answers
+once TCP 8000 is open in both the VPS firewall and the cloud-provider security group.
+That is plain HTTP; keep it on a trusted network/VPN, or for a public domain with
+automatic HTTPS run:
 
 ```sh
 ./gmc expose https builds.example.org
@@ -71,8 +75,9 @@ localhost only. For a public domain with automatic HTTPS, run:
 Point the domain at the VPS and allow inbound TCP 80/443 in both the VPS firewall and
 cloud-provider security group. The MCP endpoint is then
 `https://builds.example.org/mcp/`; REST is `https://builds.example.org/api/v1`.
-For a trusted private/VPN test only, `./gmc expose direct <VPS-IP>` binds port 8000 on
-all interfaces using plain HTTP. **Do not send real bearer tokens over public HTTP.**
+`./gmc expose direct <VPS-IP>` records the public host for MCP Host validation while
+keeping the all-interface plain-HTTP binding. **Do not send real bearer tokens over
+public HTTP.** Use `./gmc expose off` to return to a loopback-only listener.
 GradleMCP cannot change provider-level firewalls or prove reachability from outside;
 `./gmc doctor` reports local readiness and explains the remaining network checks.
 
