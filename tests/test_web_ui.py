@@ -10,6 +10,56 @@ def test_dashboard_is_off_by_default(config):
         assert http.get("/ui/").status_code == 404
 
 
+def test_root_landing_is_public_without_a_token(config):
+    # The bare VPS address must prove the controller is actually serving instead of
+    # returning a 401/404 that makes the port look bound to nothing.
+    app = create_app(config, start_scheduler=False)
+    with TestClient(app) as http:
+        page = http.get("/", headers={"Accept": "text/html"})
+        assert page.status_code == 200
+        assert "text/html" in page.headers["content-type"]
+        assert "GradleMCP controller" in page.text
+        assert "/health" in page.text and "/mcp/" in page.text
+        assert "Content-Security-Policy" in page.headers
+        assert page.headers["X-Frame-Options"] == "DENY"
+        # Dashboard is off by default: the landing page says how to turn it on
+        # instead of linking to a route that would 404.
+        assert 'href="/ui/"' not in page.text
+        assert "./gmc ui on" in page.text
+
+        api = http.get("/", headers={"Accept": "application/json"})
+        assert api.status_code == 200
+        body = api.json()
+        assert body["status"] == "ok"
+        assert body["ui_enabled"] is False
+        assert body["paths"]["ui"] is None
+        assert body["paths"]["mcp"] == "/mcp/"
+
+        # Generic clients (curl, agents) send */* and receive structured JSON.
+        default = http.get("/")
+        assert default.status_code == 200
+        assert "application/json" in default.headers["content-type"]
+
+
+def test_root_landing_links_dashboard_when_enabled(tmp_path):
+    config = Settings(
+        data_dir=tmp_path,
+        database_url=f"sqlite:///{tmp_path}/landing.db",
+        storage_reserve_mb=0,
+        ui_enabled=True,
+    )
+    app = create_app(config, start_scheduler=False)
+    with TestClient(app) as http:
+        page = http.get("/", headers={"Accept": "text/html"})
+        assert page.status_code == 200
+        assert 'href="/ui/"' in page.text
+        body = http.get("/", headers={"Accept": "application/json"}).json()
+        assert body["ui_enabled"] is True
+        assert body["paths"]["ui"] == "/ui/"
+        # The landing page stays public; protected routes still demand a token.
+        assert http.get("/api/v1/capabilities").status_code == 401
+
+
 def test_dashboard_is_optional_and_authenticated_ui_api_stays_protected(tmp_path):
     config = Settings(
         data_dir=tmp_path,

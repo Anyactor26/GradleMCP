@@ -95,9 +95,13 @@ private/VPN access or testing: it must not carry real tokens across the public I
 security group or prove external reachability. Run `./gmc doctor` for local status and
 check remote firewall/NAT/DNS from a separate network.
 
-Optional web dashboard: `./gmc ui on` serves `/ui/`; `./gmc ui off` disables it. The
-page requires an API token, stores it only in page memory, and supports queue/build
-monitoring, manual ZIP compilation, logs, cancellation, diagnostics and artifacts.
+The controller root `/` always serves a token-free landing page (HTML in a browser,
+JSON to `curl`) showing service status and every endpoint path, so opening the VPS
+address never looks like an empty port. Optional web dashboard: `./gmc ui on` serves
+`/ui/` and prints the reachable URL for the current binding; `./gmc ui off` disables
+it. The page requires an API token, stores it only in page memory, and supports
+queue/build monitoring, manual ZIP compilation, logs, cancellation, diagnostics and
+artifacts.
 Container-created database files may be root owned; use the container CLI rather than
 mixing native and container maintenance.
 

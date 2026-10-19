@@ -161,17 +161,19 @@ fi
 printf 'Starting GradleMCP and waiting for health...\n'
 docker compose up -d --wait --wait-timeout 120 gradlemcp
 docker compose exec -T gradlemcp python -c "import urllib.request; from pathlib import Path; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=10).close(); token=Path('data/bootstrap-token.local').read_text().strip(); request=urllib.request.Request('http://127.0.0.1:8000/api/v1/capabilities', headers={'Authorization':'Bearer '+token}); urllib.request.urlopen(request, timeout=10).close()"
-HOST_IP=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' | grep -v '^127\.' | head -n 1 || true)
+# Skip loopback and link-local (169.254.x) addresses; neither is reachable as a VPS endpoint.
+HOST_IP=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' | grep -vE '^(127\.|169\.254\.)' | head -n 1 || true)
 BASE="http://127.0.0.1:8000"
 [ -z "$HOST_IP" ] || BASE="http://$HOST_IP:8000"
 printf '\nGradleMCP is ready at %s (port 8000 is published on all interfaces)\n' "$BASE"
+printf 'Open %s/ in a browser for the service landing page (status, links, dashboard enablement).\n' "$BASE"
 printf 'Private API token saved to %s/%s (0600); reveal it only when needed with ./gmc token.\n' "$ROOT" "$TOKEN"
 printf 'REST API: %s/api/v1\n' "$BASE"
 printf 'Remote MCP: %s/mcp/ (Streamable HTTP; Authorization: Bearer <token>).\n' "$BASE"
-printf 'If the VPS address is still unreachable, open TCP 8000 in the VPS firewall and provider security group.\n'
+printf 'If the VPS address is still unreachable, open TCP 8000 in the VPS firewall and provider security group, or run ./gmc doctor.\n'
 printf 'Commands: ./gmc start | stop | restart | status | logs | doctor | token\n'
 printf 'Docker management uses docker compose (or sudo docker compose when required); ./gmc detects access automatically.\n'
-printf 'Optional dashboard: ./gmc ui on (then open http://127.0.0.1:8000/ui/).\n'
+printf 'Optional dashboard: ./gmc ui on (then open %s/ui/).\n' "$BASE"
 printf 'Secure public access: ./gmc expose https <your-domain> (DNS + inbound 80/443 required).\n'
 printf 'Re-run ./install.sh safely; config, data and existing credentials are preserved.\n'
 printf 'External reachability depends on DNS and VPS/cloud firewall rules; see docs/DEPLOYMENT.md.\n'

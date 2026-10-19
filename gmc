@@ -115,8 +115,29 @@ stop_service() {
 }
 
 primary_host() {
-    # First non-loopback IPv4 address of this host, when the OS reports one.
-    hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' | grep -v '^127\.' | head -n 1 || true
+    # First usable address of this host: routable IPv4 preferred (skip loopback and
+    # link-local), then a global IPv6 address. hostname -I is space-separated.
+    for candidate in $(hostname -I 2>/dev/null); do
+        case "$candidate" in
+            ''|127.*|169.254.*) continue ;;
+            *.*.*.*) printf '%s' "$candidate"; return 0 ;;
+        esac
+    done
+    for candidate in $(hostname -I 2>/dev/null); do
+        case "$candidate" in
+            ''|::1|fe80:*|*.*.*.*) continue ;;
+            *:*) printf '%s' "$candidate"; return 0 ;;
+        esac
+    done
+    return 0
+}
+
+format_host() {
+    # Bracket IPv6 literals so they can be embedded in a URL.
+    case "$1" in
+        *:*) printf '[%s]' "$1" ;;
+        *) printf '%s' "$1" ;;
+    esac
 }
 
 bind_is_public() {
@@ -126,25 +147,38 @@ bind_is_public() {
     esac
 }
 
-print_endpoint() {
+controller_base() {
+    # Single source of truth for the URL clients should actually use.
     domain=$(get_value .env GRADLEMCP_DOMAIN)
     public_host=$(get_value .env GRADLEMCP_PUBLIC_HOST)
     if [ -n "$domain" ]; then
-        base="https://$domain"
-        printf 'HTTPS:      %s (Caddy terminates TLS; verify DNS and inbound firewall rules)\n' "$base"
+        printf 'https://%s' "$domain"
     elif [ -n "$public_host" ]; then
-        base="http://$public_host:8000"
-        printf 'Direct URL: %s (plain HTTP; do not send production credentials over the public Internet)\n' "$base"
+        printf 'http://%s:8000' "$(format_host "$public_host")"
     else
         host=$(primary_host)
         if bind_is_public && [ -n "$host" ]; then
-            base="http://$host:8000"
-            printf 'Direct URL: %s (published on all interfaces; plain HTTP)\n' "$base"
+            printf 'http://%s:8000' "$(format_host "$host")"
         else
-            base='http://127.0.0.1:8000'
-            printf 'Private URL: %s (localhost only)\n' "$base"
+            printf 'http://127.0.0.1:8000'
         fi
     fi
+}
+
+print_endpoint() {
+    domain=$(get_value .env GRADLEMCP_DOMAIN)
+    public_host=$(get_value .env GRADLEMCP_PUBLIC_HOST)
+    base=$(controller_base)
+    if [ -n "$domain" ]; then
+        printf 'HTTPS:      %s (Caddy terminates TLS; verify DNS and inbound firewall rules)\n' "$base"
+    elif [ -n "$public_host" ]; then
+        printf 'Direct URL: %s (plain HTTP; do not send production credentials over the public Internet)\n' "$base"
+    elif bind_is_public && [ -n "$(primary_host)" ]; then
+        printf 'Direct URL: %s (published on all interfaces; plain HTTP)\n' "$base"
+    else
+        printf 'Private URL: %s (localhost only)\n' "$base"
+    fi
+    printf 'Landing:    %s/ (service status and dashboard link; no token required)\n' "$base"
     printf 'REST API:   %s/api/v1\n' "$base"
     printf 'MCP:        %s/mcp/ (Streamable HTTP; Authorization: Bearer <token>)\n' "$base"
     printf 'OpenAPI:    %s/openapi.json\n' "$base"
@@ -152,15 +186,7 @@ print_endpoint() {
 }
 
 print_ui_url() {
-    domain=$(get_value .env GRADLEMCP_DOMAIN)
-    public_host=$(get_value .env GRADLEMCP_PUBLIC_HOST)
-    if [ -n "$domain" ]; then
-        printf 'https://%s/ui/\n' "$domain"
-    elif [ -n "$public_host" ]; then
-        printf 'http://%s:8000/ui/\n' "$public_host"
-    else
-        printf 'http://127.0.0.1:8000/ui/\n'
-    fi
+    printf '%s/ui/\n' "$(controller_base)"
 }
 
 validate_host() {
@@ -254,6 +280,22 @@ case "$cmd" in
         compose exec -T gradlemcp python -c "import json,urllib.request; health=urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).status==200; ready=json.load(urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=5)); print(json.dumps({'health':'ok' if health else 'failed','ready':ready}, indent=2)); raise SystemExit(0 if health and ready.get('ready') else 1)"
         printf '\nEndpoint configuration:\n'
         print_endpoint
+        printf '\nPublished controller port (host-side Docker binding):\n'
+        published=$(compose port gradlemcp 8000 2>/dev/null || true)
+        if [ -n "$published" ]; then
+            printf '  %s\n' "$published"
+            case "$published" in
+                127.*|\[::1\]*|localhost*)
+                    printf '  WARNING: loopback-only binding. Browsers and agents on other machines cannot reach this host.\n'
+                    printf '           Use ./gmc expose direct HOST (HTTP) or ./gmc expose https DOMAIN (TLS) to publish it.\n'
+                    ;;
+                *)
+                    printf '  Published on all interfaces. If remote clients time out, allow TCP 8000 in both the OS and provider firewalls.\n'
+                    ;;
+            esac
+        else
+            printf '  not published (is the controller stopped?)\n'
+        fi
         printf '\nExternal reachability is not inferred here. Verify DNS and the VPS/cloud firewall from another network.\n'
         ;;
     endpoint)

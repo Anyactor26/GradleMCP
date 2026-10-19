@@ -7,7 +7,13 @@ from urllib.parse import urlparse, urlsplit
 
 from fastapi import Depends, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+)
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
@@ -74,7 +80,9 @@ class SecurityMiddleware:
             return await self.app(scope, receive, send)
         headers = dict(scope["headers"])
         path = scope["path"]
-        if path in ("/health", "/ready", "/ui") or path.startswith("/ui/"):
+        # Public, unauthenticated surface: liveness probes and the operator landing
+        # page. Everything else, including /docs and /openapi.json, stays protected.
+        if path in ("/", "/health", "/ready", "/ui") or path.startswith("/ui/"):
             return await self.app(scope, receive, send)
         try:
             auth = headers.get(b"authorization", b"").decode(errors="replace")
@@ -252,6 +260,101 @@ def create_app(config=None, *, start_scheduler=True, worker=None):
         except ServiceError:
             ok = False
         return JSONResponse({"ready": ok}, status_code=200 if ok else 503)
+
+    landing_headers = {
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "no-referrer",
+    }
+
+    def landing_payload() -> dict:
+        # Deliberately minimal: no hostnames, versions, configuration or client data.
+        return {
+            "service": "gradlemcp",
+            "status": "ok",
+            "ui_enabled": config.ui_enabled,
+            "authentication": "Authorization: Bearer <token>",
+            "paths": {
+                "health": "/health",
+                "ready": "/ready",
+                "ui": "/ui/" if config.ui_enabled else None,
+                "openapi": "/openapi.json",
+                "rest_api": "/api/v1",
+                "mcp": "/mcp/",
+            },
+        }
+
+    @app.get("/", include_in_schema=False, tags=["Health"])
+    def landing(request: Request):
+        # Browsers send text/html; curl and agents negotiate JSON (or accept */*).
+        if "text/html" in request.headers.get("accept", "").lower():
+            if config.ui_enabled:
+                dashboard = (
+                    '<li><a href="/ui/">Operator dashboard</a>'
+                    "<span>Monitoring, manual builds and artifacts</span></li>"
+                )
+            else:
+                dashboard = (
+                    '<li class="disabled"><span>Operator dashboard</span>'
+                    "<span>Disabled — enable it on the host with <code>./gmc ui on</code></span></li>"
+                )
+            html = f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GradleMCP · Controller</title>
+<style>
+  :root {{ color-scheme: dark light; }}
+  body {{ margin:0; min-height:100vh; display:grid; place-items:center;
+         font-family:system-ui, -apple-system, "Segoe UI", sans-serif;
+         background:#0f1220; color:#e7e9f3; }}
+  main {{ width:min(560px, calc(100vw - 48px)); padding:40px 0; }}
+  h1 {{ font-size:1.6rem; margin:0 0 6px; }}
+  .ok {{ color:#58d68d; font-weight:600; }}
+  p.lead {{ color:#aab0c5; margin:0 0 28px; line-height:1.5; }}
+  ul {{ list-style:none; margin:0; padding:0; display:grid; gap:12px; }}
+  li {{ display:flex; justify-content:space-between; gap:16px; align-items:baseline;
+        background:#181c2f; border:1px solid #262c45; border-radius:12px; padding:16px 18px; }}
+  li.disabled {{ opacity:.65; }}
+  li span {{ color:#aab0c5; font-size:.9rem; text-align:right; }}
+  a {{ color:#8ab4ff; text-decoration:none; font-weight:600; }}
+  a:hover {{ text-decoration:underline; }}
+  code {{ background:#262c45; padding:2px 6px; border-radius:6px; font-size:.85em; }}
+  footer {{ margin-top:28px; color:#7c83a0; font-size:.85rem; line-height:1.5; }}
+</style>
+</head>
+<body>
+<main>
+  <h1>GradleMCP controller</h1>
+  <p class="lead"><span class="ok">● Running.</span> This port serves the GradleMCP
+  API and remote MCP transport — not an anonymous website. Build and control routes
+  require a Bearer token.</p>
+  <ul>
+    {dashboard}
+    <li><a href="/health">Liveness check</a><span><code>/health</code> · public</span></li>
+    <li><a href="/openapi.json">OpenAPI schema</a><span><code>/openapi.json</code> · token required</span></li>
+    <li><span>REST API</span><span><code>/api/v1</code> · token required</span></li>
+    <li><span>Remote MCP</span><span><code>/mcp/</code> · Streamable HTTP, token required</span></li>
+  </ul>
+  <footer>If this address is unreachable from another network, open the port in the
+  VPS/provider firewall, or run <code>./gmc doctor</code> and <code>./gmc endpoint</code>
+  on the host to inspect the published binding.</footer>
+</main>
+</body>
+</html>"""
+            return HTMLResponse(
+                html,
+                headers={
+                    **landing_headers,
+                    "Content-Security-Policy": (
+                        "default-src 'none'; style-src 'unsafe-inline'; "
+                        "base-uri 'none'; frame-ancestors 'none'"
+                    ),
+                },
+            )
+        return JSONResponse(landing_payload(), headers=landing_headers)
 
     @app.get("/api/v1/capabilities")
     def capabilities(c=Depends(client)):
