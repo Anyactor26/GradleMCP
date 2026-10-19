@@ -28,8 +28,11 @@ addresses reach the same listener — no application change selects between them
 platform side must (1) assign the 1:1 NAT mapping to this instance and (2) allow inbound
 TCP 8000 in the security group, in addition to the OS firewall. Verify from a *different*
 network (not from the VPS itself): `curl -i http://<public-ip>:8000/health` and
-`curl -i http://<public-ip>:8000/ui/` should both return HTTP 200. `./gmc doctor` lists
-the locally reported addresses and prints this exact probe checklist.
+`curl -i http://<public-ip>:8000/ui/` should both return HTTP 200. `./gmc doctor`
+runs live probes against loopback and every locally reported address, shows the host
+firewall in use, and prints a verdict naming the failing layer. Note that another
+service working on a different port (for example Minecraft on 25565) only proves that
+port's rule exists — TCP 8000 needs its own security-group and firewall entry.
 
 The operator dashboard at `/ui/` is enabled by default (a static token-gated shell; no
 data is exposed without an API credential). Set `ui_enabled=false` or run

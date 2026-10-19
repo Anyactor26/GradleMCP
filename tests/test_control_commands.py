@@ -35,6 +35,16 @@ def control_fixture(tmp_path):
         "sys.exit(print(os.environ.get('GMCP_TEST_HOSTNAME', '')) or 0)\n"
     )
     hostname.chmod(0o755)
+    # Deterministic stand-in for the doctor HTTP probes.
+    curl = bin_dir / "curl"
+    curl.write_text(
+        f"#!{sys.executable}\n"
+        "import os, sys\n"
+        "url = sys.argv[-1]\n"
+        "key = 'GMCP_TEST_LOOPBACK' if '127.0.0.1' in url else 'GMCP_TEST_PRIVATE'\n"
+        "print(os.environ.get(key, '200'), end='')\n"
+    )
+    curl.chmod(0o755)
     env = os.environ | {
         "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"],
         "DOCKER_LOG": str(log),
@@ -197,6 +207,23 @@ def test_doctor_confirms_all_interface_publish_and_firewall_hint(tmp_path):
     assert "provider firewalls" in result.stdout
 
 
+def test_ui_on_warns_when_publish_is_loopback_only(tmp_path):
+    control = control_fixture(tmp_path)
+    root, _, _ = control
+    (root / ".env").write_text("GRADLEMCP_BIND_ADDRESS=127.0.0.1\n")
+    result = run_control(control, "ui", "on")
+    assert result.returncode == 0, result.stderr
+    assert "published on 127.0.0.1 only" in result.stderr
+    assert "gmc expose direct <public-ip>" in result.stderr
+
+
+def test_ui_on_is_silent_about_bind_with_default_publish(tmp_path):
+    control = control_fixture(tmp_path)
+    result = run_control(control, "ui", "on")
+    assert result.returncode == 0, result.stderr
+    assert "127.0.0.1 only" not in result.stderr
+
+
 def test_ui_status_reports_enabled_without_explicit_opt_in(tmp_path):
     control = control_fixture(tmp_path)
     result = run_control(control, "ui", "status")
@@ -236,3 +263,58 @@ def test_doctor_reports_disabled_dashboard_configuration(tmp_path):
     assert result.returncode == 0, result.stderr
     assert "Configuration: disabled" in result.stdout
     assert "./gmc ui on" in result.stdout
+
+
+def test_doctor_verdict_blames_loopback_only_publish(tmp_path):
+    # Loopback answers, the private host IP does not: the .env bind is 127.0.0.1.
+    control = control_fixture(tmp_path)
+    result = run_control(
+        control,
+        "doctor",
+        extra_env={
+            "GMCP_TEST_PORT": "127.0.0.1:8000",
+            "GMCP_TEST_HOSTNAME": "10.0.0.112",
+            "GMCP_TEST_LOOPBACK": "200",
+            "GMCP_TEST_PRIVATE": "000",
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert "GET 127.0.0.1:8000/health -> HTTP 200" in result.stdout
+    assert "GET 10.0.0.112:8000/health -> HTTP 000" in result.stdout
+    assert "publishing on 127.0.0.1 only" in result.stdout
+    assert "gmc expose direct <public-ip>" in result.stdout
+
+
+def test_doctor_verdict_locates_failure_outside_the_host(tmp_path):
+    # Everything local answers: the remaining gate is the external firewall/NAT layer.
+    control = control_fixture(tmp_path)
+    result = run_control(
+        control,
+        "doctor",
+        extra_env={
+            "GMCP_TEST_HOSTNAME": "10.0.0.112",
+            "GMCP_TEST_LOOPBACK": "200",
+            "GMCP_TEST_PRIVATE": "200",
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert "application and Docker publish are correct" in result.stdout
+    assert "security group" in result.stdout
+    assert "Minecraft" in result.stdout
+    assert "curl -i http://<public-ip>:8000/ui/" in result.stdout
+
+
+def test_doctor_verdict_detects_dead_controller(tmp_path):
+    control = control_fixture(tmp_path)
+    result = run_control(
+        control,
+        "doctor",
+        extra_env={
+            "GMCP_TEST_HOSTNAME": "10.0.0.112",
+            "GMCP_TEST_LOOPBACK": "000",
+            "GMCP_TEST_PRIVATE": "000",
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert "not answering even on loopback" in result.stdout
+    assert "./gmc logs" in result.stdout
