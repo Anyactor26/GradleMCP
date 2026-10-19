@@ -1,10 +1,22 @@
 """Keep published identity/license and manually activated CI paths consistent."""
 
+import json
 import tomllib
 from pathlib import Path
 
 import pytest
 import yaml
+
+
+def test_vps_address_is_reachable_by_default():
+    """Every supported deployment path must listen beyond loopback by default."""
+    compose = yaml.safe_load(Path("compose.yaml").read_text())
+    controller = compose["services"]["gradlemcp"]
+    assert controller["ports"] == ["${GRADLEMCP_BIND_ADDRESS:-0.0.0.0}:8000:8000"]
+    assert controller["environment"]["GRADLEMCP_HOST"] == "0.0.0.0"
+    assert "Environment=GRADLEMCP_HOST=0.0.0.0" in Path("deploy/gradlemcp.service").read_text()
+    example = json.loads(Path("config/gradlemcp.example.json").read_text())
+    assert example["host"] == "0.0.0.0"
 
 
 def test_arr_license_and_developer_metadata():
