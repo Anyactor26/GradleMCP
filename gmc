@@ -182,7 +182,7 @@ print_endpoint() {
     printf 'REST API:   %s/api/v1\n' "$base"
     printf 'MCP:        %s/mcp/ (Streamable HTTP; Authorization: Bearer <token>)\n' "$base"
     printf 'OpenAPI:    %s/openapi.json\n' "$base"
-    printf 'Dashboard:  %s/ui/ (optional; enable with ./gmc ui on)\n' "$base"
+    printf 'Dashboard:  %s/ui/ (on by default; ./gmc ui off removes it)\n' "$base"
 }
 
 print_ui_url() {
@@ -296,6 +296,44 @@ case "$cmd" in
         else
             printf '  not published (is the controller stopped?)\n'
         fi
+        printf '\nDashboard (/ui/):\n'
+        ui_setting=$(get_value .gradlemcp.env GRADLEMCP_UI_ENABLED)
+        ui_disabled=0
+        case "$ui_setting" in
+            false|False|0|no|off)
+                ui_disabled=1
+                printf '  Configuration: disabled (GRADLEMCP_UI_ENABLED=false). Run ./gmc ui on, then restart.\n'
+                ;;
+            '')
+                printf '  Configuration: enabled (default; override with ./gmc ui off)\n'
+                ;;
+            *)
+                printf '  Configuration: enabled (GRADLEMCP_UI_ENABLED=%s)\n' "$ui_setting"
+                ;;
+        esac
+        if [ "$ui_disabled" -eq 0 ]; then
+            ui_code=$(compose exec -T gradlemcp python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/ui/', timeout=5).status)" 2>/dev/null || true)
+            if [ -n "$ui_code" ]; then
+                printf '  In-container probe: GET /ui/ -> HTTP %s\n' "$ui_code"
+            else
+                printf '  In-container probe: unavailable (is the controller running?)\n'
+            fi
+        fi
+        printf '\nAddresses this host reports locally (hostname -I):\n'
+        host_addresses=$(hostname -I 2>/dev/null || true)
+        if [ -n "$host_addresses" ]; then
+            for address in $host_addresses; do printf '  %s\n' "$address"; done
+        else
+            printf '  none reported\n'
+        fi
+        printf '  A cloud public IP (for example 203.0.113.10) is usually 1:1 NAT to one of the\n'
+        printf '  private addresses above, so it never appears in this list. Binding 0.0.0.0 covers\n'
+        printf '  both; remaining failures are external to this host. From another network run:\n'
+        printf '    curl -i http://<public-ip>:8000/health     # expect HTTP 200\n'
+        printf '    curl -i http://<public-ip>:8000/ui/        # expect HTTP 200 when the dashboard is enabled\n'
+        printf '  If the connection times out, allow inbound TCP 8000 in the cloud security group AND\n'
+        printf '  the OS firewall (ufw/iptables/nftables). Connection refused means the controller or\n'
+        printf '  published port above is not running.\n'
         printf '\nExternal reachability is not inferred here. Verify DNS and the VPS/cloud firewall from another network.\n'
         ;;
     endpoint)
@@ -326,7 +364,7 @@ case "$cmd" in
                 require_install
                 set_value .gradlemcp.env GRADLEMCP_UI_ENABLED set true
                 start_service
-                printf 'Optional dashboard enabled: '
+                printf 'Dashboard enabled: '
                 print_ui_url
                 printf 'The dashboard asks for a token and keeps it in browser memory only.\n'
                 ;;
@@ -334,12 +372,13 @@ case "$cmd" in
                 require_install
                 set_value .gradlemcp.env GRADLEMCP_UI_ENABLED set false
                 start_service
-                printf 'Optional dashboard disabled.\n'
+                printf 'Dashboard disabled. Re-enable with ./gmc ui on.\n'
                 ;;
             status)
                 enabled=$(get_value .gradlemcp.env GRADLEMCP_UI_ENABLED)
-                case "$enabled" in true|True|1|yes|on) printf 'Dashboard: enabled at ';;
-                    *) printf 'Dashboard: disabled. Enable with ./gmc ui on.\n'; exit 0 ;;
+                case "$enabled" in false|False|0|no|off)
+                    printf 'Dashboard: disabled. Enable with ./gmc ui on.\n'; exit 0 ;;
+                    *) printf 'Dashboard: enabled at ' ;;
                 esac
                 print_ui_url
                 ;;

@@ -38,9 +38,11 @@ has Docker administration capability; compromising it is host compromise.
   authentication. Origin checks everywhere, plus MCP SDK DNS-rebinding/Host checks for
   host-specific binds (an all-interface bind is already reachable by any address, so it
   relies on bearer auth and REST Origin checks). No wildcard CORS.
-- Optional dashboard is disabled by default and serves only static login/UI assets without
-  a token. API calls remain bearer-authenticated; the UI holds a user-entered token in
-  page memory only (not localStorage/cookies) and clears it on logout/page reload.
+- Dashboard is enabled by default but serves only static login/UI assets without a token
+  (operators can remove the route with `./gmc ui off`). API calls remain
+  bearer-authenticated; the UI holds a user-entered token in page memory only (the
+  theme preference is the sole localStorage entry, never credentials) and clears it on
+  logout/page reload.
 
 ## Network and SSRF
 

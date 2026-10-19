@@ -31,8 +31,9 @@ management is local-only, deliberately not an HTTP remote admin shell.
 `GET /api/v1/capabilities` and `/api/v1/system/endpoint` also advertise protocol
 paths: REST `/api/v1`, remote MCP Streamable HTTP `/mcp/` (trailing slash), with
 `Authorization: Bearer <token>`. A configured URL is not proof of external reachability.
-The optional operator UI is disabled by default; enable it on a Docker install with
-`./gmc ui on`. Its `/ui/` page does not bypass API authentication.
+The operator UI at `/ui/` is enabled by default; disable it on a Docker install with
+`./gmc ui off` (or `ui_enabled=false`). Its `/ui/` page does not bypass API
+authentication.
 
 BuildRequest:
 ```json

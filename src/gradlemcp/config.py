@@ -51,7 +51,9 @@ class Settings(BaseSettings):
     public_url: str | None = None
     mcp_allowed_hosts: list[str] = []
     mcp_allowed_origins: list[str] = []
-    ui_enabled: bool = False
+    # The dashboard is a token-gated static shell (all data routes stay
+    # Bearer-authenticated), so it is served by default; ./gmc ui off removes it.
+    ui_enabled: bool = True
     exposure: Literal["private", "direct", "proxy", "cloudflare", "ngrok", "custom"] = "private"
     tunnel_status_url: str | None = None
     publish_tasks: list[str] = []
